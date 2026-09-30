@@ -36,6 +36,10 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
       editor.redo();
       return;
     }
+
+    const workspace = document.querySelector('.workspace-tab.active')?.dataset.workspace ?? 'layout';
+    if (workspace === 'uv' || workspace === 'paint') return;
+
     if (event.shiftKey && event.code === 'Tab') {
       event.preventDefault();
       snapButton.click();
