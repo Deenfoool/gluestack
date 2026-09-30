@@ -1,18 +1,13 @@
 import { SimplifyModifier } from 'three/addons/modifiers/SimplifyModifier.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cloneTriangle, readMeshTopology } from '../edit/topology.js';
+import { disposeGeometryIfUnreferenced } from '../runtime/resource-ownership.js';
 
-const DECIMATE_SAFE_ATTRIBUTES = new Set(['position', 'normal']);
-const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap'];
+const DECIMATE_SAFE_ATTRIBUTES = new Set(['position', 'uv', 'normal', 'tangent', 'color']);
 
 function hasMorphData(mesh) {
   if (mesh.morphTargetInfluences?.length) return true;
   return Object.values(mesh.geometry?.morphAttributes ?? {}).some((items) => items?.length);
-}
-
-function materialUsesTextures(mesh) {
-  const materials = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
-  return materials.some((material) => TEXTURE_SLOTS.some((slot) => material?.[slot]?.isTexture));
 }
 
 export function applyTriangulate(modifiers) {
@@ -33,7 +28,7 @@ export async function applyDecimate(modifiers, ratio = 0.5) {
     return false;
   }
   if (Array.isArray(mesh.material) && mesh.material.length > 1) {
-    modifiers.onStatus('Decimate: multi-material Mesh пока не поддерживается');
+    modifiers.onStatus('Decimate: multi-material Mesh пока не поддерживается — SimplifyModifier r180 не сохраняет geometry groups');
     return false;
   }
   if (hasMorphData(mesh)) {
@@ -41,8 +36,8 @@ export async function applyDecimate(modifiers, ratio = 0.5) {
     return false;
   }
   const unsupported = Object.keys(mesh.geometry.attributes).filter((name) => !DECIMATE_SAFE_ATTRIBUTES.has(name));
-  if (unsupported.length || materialUsesTextures(mesh)) {
-    modifiers.onStatus(`Decimate отменён: SimplifyModifier не сохраняет безопасно ${unsupported.length ? unsupported.join(', ') : 'texture coordinates'}`);
+  if (unsupported.length) {
+    modifiers.onStatus(`Decimate отменён: Three.js r180 SimplifyModifier не сохраняет атрибуты ${unsupported.join(', ')}`);
     return false;
   }
 
@@ -73,16 +68,18 @@ export async function applyDecimate(modifiers, ratio = 0.5) {
     }
 
     modifiers.editor.checkpoint('Decimate');
-    mesh.geometry.dispose();
+    const source = mesh.geometry;
     mesh.geometry = simplified;
-    mesh.geometry.computeVertexNormals();
-    mesh.geometry.normalizeNormals();
+    if (!mesh.geometry.getAttribute('normal')) mesh.geometry.computeVertexNormals();
+    else mesh.geometry.normalizeNormals();
     mesh.geometry.computeBoundingBox();
     mesh.geometry.computeBoundingSphere();
+    disposeGeometryIfUnreferenced(modifiers.editor, source);
     modifiers.editor.refreshSelectionVisuals();
     modifiers.editor.events.onTransform(mesh);
     modifiers.editor.events.onStructure();
-    modifiers.onStatus(`Decimate применён · цель ~${Math.round(ratio * 100)}%`);
+    const uvKept = Boolean(mesh.geometry.getAttribute('uv'));
+    modifiers.onStatus(`Decimate применён · цель ~${Math.round(ratio * 100)}%${uvKept ? ' · UV сохранён' : ''}`);
     return true;
   } catch (error) {
     geometry?.dispose?.();
