@@ -31,6 +31,15 @@ export function collectReferencedResources(root) {
   return { geometries, materials, textures };
 }
 
+export function geometryReferencedByScene(editor, geometry) {
+  if (!editor?.modelRoot || !geometry) return false;
+  let referenced = false;
+  editor.modelRoot.traverse((object) => {
+    if (!referenced && object.geometry === geometry) referenced = true;
+  });
+  return referenced;
+}
+
 export function textureReferencedByScene(editor, texture) {
   if (!editor?.modelRoot || !texture?.isTexture) return false;
   let referenced = false;
@@ -45,6 +54,10 @@ export function textureReferencedByScene(editor, texture) {
     }
   });
   return referenced;
+}
+
+export function disposeGeometryIfUnreferenced(editor, geometry) {
+  if (geometry && !geometryReferencedByScene(editor, geometry)) geometry.dispose?.();
 }
 
 export function disposeTextureIfUnreferenced(editor, texture) {
@@ -72,5 +85,5 @@ export function installResourceOwnership(editor) {
     }
   };
 
-  return { collectReferencedResources, disposeTextureIfUnreferenced };
+  return { collectReferencedResources, disposeGeometryIfUnreferenced, disposeTextureIfUnreferenced };
 }
