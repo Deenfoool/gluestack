@@ -78,8 +78,18 @@ UV Editing работает непосредственно с `geometry.attribut
 LOD-уровни получают `userData.gluestackLOD`; LOD1/LOD2 скрываются во viewport, но остаются в сцене и экспортируются для дальнейшего выбора игровым runtime.
 
 ## Этап 8 — расширение
-- [ ] Texture Paint.
-- [ ] Procedural low-poly generators.
-- [ ] Расширенная работа с освещением и камерой.
+- [x] Texture Paint по Base Color прямо на 3D-модели через raycast + UV; настройки Color / Size / Strength.
+- [x] Procedural low-poly generators: Rock, Island, Tree, Crate.
+- [x] Scene/Camera controls: фон, рабочее освещение, FOV/Near/Far, Reset View, добавление экспортируемых Point/Directional Light и Camera from View.
+
+Texture Paint в текущей версии ориентирован на Base Color. Более сложные paint-каналы (Normal/Roughness/Metallic) логично развивать отдельным следующим этапом после browser QA текущего MVP.
+
+## После MVP
+- [ ] Полный browser smoke-test всех workspaces и операций на GitHub Pages.
+- [ ] Неразрушающий modifier stack, сохраняемый в `.gluestack`.
+- [ ] Multi-material editing по material slots.
+- [ ] Texture Paint для Normal / Roughness / Metallic / Emissive.
+- [ ] Улучшенные UV unwrap/packing алгоритмы для сложных production mesh.
+- [ ] Расширенная оптимизация GLB и runtime LOD policy.
 
 Неактуальные реализации не сохраняются рядом с новыми: заменённый код удаляется в том же изменении, а история остаётся в Git.
