@@ -40,8 +40,13 @@
 - [x] Loop-style Subdivision, 1–3 уровня.
 - [x] Decimate через Three.js r180 SimplifyModifier + Triangulate / Normalize.
 - [x] Boolean Union / Difference / Intersect для watertight/two-manifold Mesh через three-bvh-csg. Cutter сохраняется.
+- [x] Неразрушающий Modifier Stack для Mirror / Array / Bevel / Solidify / Subdivision / Decimate / Triangulate.
+- [x] Toggle, reorder, remove, Apply Stack и Clear Stack с общей Undo/Redo историей.
+- [x] Modifier Stack сохраняется в `.gluestack` как source geometry + descriptors и восстанавливается после открытия проекта.
 
-Модификаторы на текущем этапе применяются destructive-операцией с общей Undo/Redo историей. QA-защита блокирует операции, если текущая реализация потеряет custom attributes или morph data. Decimate использует общий group-preserving simplification pipeline: geometry groups и их `materialIndex` сохраняются для multi-material Mesh. Поддерживаемые атрибуты: `position`, `uv`, `normal`, `tangent`, `color`; `uv1+`, skin/custom attributes блокируются.
+Mirror / Array / Bevel / Solidify / Subdivision / Decimate / Triangulate теперь по умолчанию добавляются в non-destructive stack. Boolean пока остаётся destructive CSG-операцией и требует сначала Apply/Clear Stack. Edit Mode, UV Editing, Join, Separate, Duplicate, Apply Transform и Origin защищены от изменения вычисленной geometry при активном stack. Обычный `Export GLB` содержит только вычисленный результат без editor-only stack metadata.
+
+Decimate использует общий group-preserving simplification pipeline: geometry groups и их `materialIndex` сохраняются для multi-material Mesh. Поддерживаемые атрибуты: `position`, `uv`, `normal`, `tangent`, `color`; `uv1+`, skin/custom attributes блокируются.
 
 ## Этап 4 — UV Editing
 - [x] Отдельный workspace UV Editing с UV canvas и существующим Three.js viewport без второго renderer.
@@ -72,10 +77,11 @@ UV Editing работает непосредственно с `geometry.attribut
 - [x] Локальные именованные проекты через IndexedDB.
 - [x] Debounced autosave и восстановление последней сессии.
 - [x] Собственный бинарный `.gluestack`: GLB + редакторские метаданные (камера, selection, snap, userData/extras).
+- [x] `.gluestack` v2 сохраняет исходную geometry для Mesh с non-destructive modifier stack; runtime после загрузки пересчитывает evaluated geometry.
 - [x] History snapshots клонируют Skinned hierarchy через `SkeletonUtils.clone`, а CanvasTexture — отдельным canvas snapshot.
 - [x] После открытия `.gluestack` обычные Mesh снова получают независимые editable geometry/material resources.
 
-Один и тот же project container используется для скачиваемого файла и IndexedDB, поэтому локальный snapshot и файл проекта не расходятся по формату. Текстуры и animation clips хранятся внутри вложенного GLB.
+Один и тот же project container используется для скачиваемого файла и IndexedDB, поэтому локальный snapshot и файл проекта не расходятся по формату. Текстуры, animation clips и modifier stack descriptors хранятся внутри вложенного GLB/metadata проекта.
 
 ## Этап 7 — Game Ready
 - [x] Статистика meshes / vertices / triangles / materials / textures и оценка texture RAM.
@@ -106,7 +112,7 @@ Animation pipeline сохраняет и проигрывает clips и теп�
 - [x] Защита destructive-операций от молчаливой потери glTF attributes.
 - [ ] Advanced animation editor: Dope Sheet, удаление/перемещение отдельных keyframes, interpolation/easing.
 - [x] Multi-material-aware LOD/Decimate с сохранением geometry groups.
-- [ ] Неразрушающий modifier stack, сохраняемый в `.gluestack`.
+- [x] Неразрушающий modifier stack, сохраняемый в `.gluestack`.
 - [x] Texture Paint для Normal / Roughness / Metallic / Emissive.
 - [ ] Улучшенные UV unwrap/packing алгоритмы для сложных production mesh.
 - [ ] Расширенная оптимизация GLB и runtime LOD policy.
