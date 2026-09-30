@@ -14,6 +14,11 @@ function cloneVertices(vertices) {
   return vertices.map((vertex) => ({ position: vertex.position.clone(), sources: [] }));
 }
 
+function hasMorphData(mesh) {
+  if (mesh?.morphTargetInfluences?.length) return true;
+  return Object.values(mesh?.geometry?.morphAttributes ?? {}).some((attributes) => attributes?.length);
+}
+
 function reorderTriangleCorners(triangle, order, mappedVertices) {
   const attrs = {};
   for (const [name, corners] of Object.entries(triangle.attrs ?? {})) {
@@ -46,6 +51,10 @@ export class ModifierController {
     const mesh = this.editor.selected;
     if (!mesh?.isMesh || mesh.isSkinnedMesh || !mesh.geometry?.getAttribute('position')) {
       this.onStatus('Modifier: выберите обычный Mesh');
+      return null;
+    }
+    if (hasMorphData(mesh)) {
+      this.onStatus('Modifier отменён: morph targets пока не поддерживаются без потери данных');
       return null;
     }
     return mesh;
