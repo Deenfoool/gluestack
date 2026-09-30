@@ -1,27 +1,44 @@
-import { createIcons, icons } from 'lucide';
 import { Editor3D } from './editor.js';
+import { EditModeController } from './edit/controller.js';
+import { TransformModal } from './transform-modal.js';
+import { bindKeyboard } from './keyboard.js';
+import {
+  refreshIcons,
+  renderHistory,
+  renderInspector,
+  renderModeUI,
+  renderOutliner,
+  renderStats,
+} from './ui.js';
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const DEG2RAD = Math.PI / 180;
 
-const viewport = $('#viewport');
-const outliner = $('#outliner');
-const statusMessage = $('#status-message');
-const sceneStats = $('#scene-stats');
-const objectProperties = $('#object-properties');
-const emptyProperties = $('#empty-properties');
-const objectName = $('#object-name');
-const fileInput = $('#file-input');
-const transformHud = $('#transform-hud');
+const elements = {
+  viewport: $('#viewport'),
+  outliner: $('#outliner'),
+  statusMessage: $('#status-message'),
+  sceneStats: $('#scene-stats'),
+  objectProperties: $('#object-properties'),
+  emptyProperties: $('#empty-properties'),
+  objectName: $('#object-name'),
+  fileInput: $('#file-input'),
+  transformHud: $('#transform-hud'),
+  modeToggle: $('#mode-toggle'),
+  editSelectModes: $('#edit-select-modes'),
+  objectMenu: $('#object-menu'),
+  meshMenu: $('#mesh-menu'),
+  buildLabel: $('.build-label'),
+};
 
 let editor;
+let editMode;
 let refreshQueued = false;
 let transformRefreshQueued = false;
-let modalTransform = null;
 
-function refreshIcons() {
-  createIcons({ icons, attrs: { 'stroke-width': 1.7 } });
+function setStatus(message) {
+  elements.statusMessage.textContent = message;
 }
 
 function scheduleRefresh() {
@@ -29,10 +46,11 @@ function scheduleRefresh() {
   refreshQueued = true;
   requestAnimationFrame(() => {
     refreshQueued = false;
-    if (!editor) return;
-    renderOutliner();
-    renderInspector(editor.selected);
-    renderStats();
+    if (!editor || !editMode) return;
+    renderOutliner(editor, editMode, elements.outliner);
+    renderInspector(editor, editMode, elements);
+    renderStats(editor, editMode, elements.sceneStats);
+    renderModeUI(editor, editMode, elements);
     refreshIcons();
   });
 }
@@ -42,28 +60,12 @@ function scheduleTransformRefresh() {
   transformRefreshQueued = true;
   requestAnimationFrame(() => {
     transformRefreshQueued = false;
-    if (!editor) return;
-    renderInspector(editor.selected);
-    renderStats();
+    renderInspector(editor, editMode, elements);
+    renderStats(editor, editMode, elements.sceneStats);
   });
 }
 
-function setStatus(message) {
-  statusMessage.textContent = message;
-}
-
-function renderHistory(state) {
-  $$('[data-history="undo"]').forEach((button) => {
-    button.disabled = !state.canUndo;
-    button.title = state.canUndo ? `Undo: ${state.undoLabel} (Ctrl+Z)` : 'Undo (Ctrl+Z)';
-  });
-  $$('[data-history="redo"]').forEach((button) => {
-    button.disabled = !state.canRedo;
-    button.title = state.canRedo ? `Redo: ${state.redoLabel} (Ctrl+Shift+Z)` : 'Redo (Ctrl+Shift+Z)';
-  });
-}
-
-editor = new Editor3D(viewport, {
+editor = new Editor3D(elements.viewport, {
   onSelection: scheduleRefresh,
   onStructure: scheduleRefresh,
   onTransform: scheduleTransformRefresh,
@@ -71,92 +73,40 @@ editor = new Editor3D(viewport, {
   onStatus: setStatus,
 });
 
-function icon(name, className = '') {
-  const element = document.createElement('i');
-  element.dataset.lucide = name;
-  if (className) element.className = className;
-  return element;
-}
+editMode = new EditModeController(editor, {
+  onChange: scheduleRefresh,
+  onStatus: setStatus,
+});
 
-function renderOutliner() {
-  outliner.replaceChildren();
-  const objects = editor.getObjects();
+const objectPointerHandler = editor.handlePointerUp.bind(editor);
+editor.handlePointerUp = (event) => {
+  if (editMode.active) editMode.handlePointerUp(event);
+  else objectPointerHandler(event);
+};
 
-  if (!objects.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty-properties';
-    empty.textContent = 'Scene Collection пуста';
-    outliner.appendChild(empty);
-    return;
-  }
-
-  for (const { object, depth } of objects) {
-    const row = document.createElement('div');
-    row.className = `outliner-row${editor.isSelected(object) ? ' selected' : ''}${object === editor.selected ? ' active' : ''}`;
-    row.style.paddingLeft = `${7 + depth * 14}px`;
-    row.title = object.name || object.type;
-    row.tabIndex = 0;
-    row.setAttribute('role', 'button');
-
-    const type = document.createElement('span');
-    type.className = 'outliner-type';
-    type.appendChild(icon(object.userData.gluestackCollection ? 'folder' : object.isMesh ? 'box' : 'layers-3'));
-
-    const name = document.createElement('span');
-    name.className = 'outliner-name';
-    name.textContent = object.name || object.type || 'Object';
-
-    const visibility = document.createElement('button');
-    visibility.type = 'button';
-    visibility.className = 'outliner-visibility';
-    visibility.title = object.visible ? 'Скрыть' : 'Показать';
-    visibility.appendChild(icon(object.visible ? 'eye' : 'eye-off'));
-    visibility.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      editor.setVisible(object, !object.visible);
-    });
-
-    row.append(type, name, visibility);
-    row.addEventListener('click', (event) => editor.select(object, event.shiftKey));
-    row.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        editor.select(object, event.shiftKey);
-      }
-    });
-    outliner.appendChild(row);
-  }
-}
-
-function renderInspector(object) {
-  if (!object) {
-    emptyProperties.hidden = false;
-    objectProperties.hidden = true;
-    return;
-  }
-
-  emptyProperties.hidden = true;
-  objectProperties.hidden = false;
-  if (document.activeElement !== objectName) objectName.value = object.name || object.type || 'Object';
-
-  const rotationDegrees = editor.getRotationDegrees(object);
-  for (const input of $$('[data-transform]')) {
-    if (document.activeElement === input) continue;
-    const [group, axis] = input.dataset.transform.split('.');
-    const value = input.dataset.angle === 'true' ? rotationDegrees[axis] : object[group][axis];
-    input.value = Number(value.toFixed(4));
-  }
-}
-
-function renderStats() {
-  const stats = editor.getStats();
-  const selected = editor.getSelectedObjects().length;
-  sceneStats.textContent = `Objects ${stats.objects.toLocaleString()} · Selected ${selected} · Vertices ${stats.vertices.toLocaleString()} · Triangles ${stats.triangles.toLocaleString()}`;
-}
+const transformModal = new TransformModal(
+  editor,
+  editMode,
+  elements.transformHud,
+  setStatus,
+  scheduleTransformRefresh,
+);
 
 function closeMenus() {
   $$('.menu[open]').forEach((menu) => menu.removeAttribute('open'));
+}
+
+function requestNumber(label, defaultValue, options = {}) {
+  const raw = window.prompt(label, String(defaultValue));
+  if (raw === null) return null;
+  const value = Number(String(raw).replace(',', '.'));
+  if (!Number.isFinite(value)) {
+    setStatus('Нужно ввести число');
+    return null;
+  }
+  if (options.min !== undefined && value < options.min) return null;
+  if (options.max !== undefined && value > options.max) return null;
+  return value;
 }
 
 function setTransformMode(mode) {
@@ -167,15 +117,16 @@ function setTransformMode(mode) {
 }
 
 async function importSelectedFile() {
-  const [file] = fileInput.files;
+  const [file] = elements.fileInput.files;
   if (!file) return;
   try {
+    if (editMode.active) editMode.exit();
     await editor.importFile(file);
   } catch (error) {
     console.error(error);
     setStatus(`Ошибка импорта: ${error.message || error}`);
   } finally {
-    fileInput.value = '';
+    elements.fileInput.value = '';
   }
 }
 
@@ -188,13 +139,42 @@ async function exportScene() {
   }
 }
 
+function runEditAction(action) {
+  switch (action) {
+    case 'edit-select-all': editMode.selectAll(); return true;
+    case 'edit-deselect': editMode.deselectAll(); return true;
+    case 'edit-delete': editMode.deleteSelection(); return true;
+    case 'edit-merge': editMode.mergeSelected(); return true;
+    case 'edit-fill': editMode.fillSelected(); return true;
+    case 'edit-recalculate-normals': editMode.recalculateNormals(); return true;
+    case 'edit-flip-normals': editMode.flipNormals(); return true;
+    case 'edit-extrude': {
+      const value = requestNumber('Extrude distance', 0.25);
+      if (value !== null) editMode.extrude(value);
+      return true;
+    }
+    case 'edit-inset': {
+      const value = requestNumber('Inset factor (0..1)', 0.2, { min: 0.001, max: 0.999 });
+      if (value !== null) editMode.inset(value);
+      return true;
+    }
+    default: return false;
+  }
+}
+
 function runAction(action) {
   closeMenus();
-  if (modalTransform) cancelModalTransform(true);
+  if (transformModal.state) transformModal.cancel(true);
+  if (action === 'toggle-mode') {
+    editMode.toggle();
+    return;
+  }
+  if (editMode.active && runEditAction(action)) return;
 
+  if (editMode.active && (action === 'undo' || action === 'redo')) editMode.exit();
   switch (action) {
-    case 'new': editor.newScene(); break;
-    case 'import': fileInput.click(); break;
+    case 'new': if (editMode.active) editMode.exit(); editor.newScene(); break;
+    case 'import': if (editMode.active) editMode.exit(); elements.fileInput.click(); break;
     case 'export': exportScene(); break;
     case 'delete': editor.deleteSelected(); break;
     case 'duplicate': editor.duplicateSelected(); break;
@@ -214,24 +194,25 @@ function runAction(action) {
 $$('[data-action]').forEach((button) => {
   button.addEventListener('click', () => runAction(button.dataset.action));
 });
-
 $$('[data-history]').forEach((button) => {
   button.addEventListener('click', () => runAction(button.dataset.history));
 });
-
 $$('[data-primitive]').forEach((button) => {
   button.addEventListener('click', () => {
-    if (modalTransform) cancelModalTransform(true);
+    if (transformModal.state) transformModal.cancel(true);
+    if (editMode.active) editMode.exit();
     editor.addPrimitive(button.dataset.primitive);
     closeMenus();
   });
 });
-
 $$('[data-transform-mode]').forEach((button) => {
   button.addEventListener('click', () => {
-    if (modalTransform) cancelModalTransform(true);
+    if (transformModal.state) transformModal.cancel(true);
     setTransformMode(button.dataset.transformMode);
   });
+});
+$$('[data-edit-select-mode]').forEach((button) => {
+  button.addEventListener('click', () => editMode.setSelectionMode(button.dataset.editSelectMode));
 });
 
 const snapButton = $('[data-snap]');
@@ -245,283 +226,35 @@ $$('.workspace-tab:not(:disabled)').forEach((button) => {
   button.addEventListener('click', () => {
     $$('.workspace-tab').forEach((tab) => tab.classList.remove('active'));
     button.classList.add('active');
-    setStatus(`${button.textContent.trim()} workspace`);
+    if (button.dataset.workspace === 'modeling' && !editMode.active && editor.selected?.isMesh) editMode.enter();
+    else setStatus(`${button.textContent.trim()} workspace`);
   });
 });
 
 $('[data-view="frame"]').addEventListener('click', () => editor.frameSelected());
-fileInput.addEventListener('change', importSelectedFile);
-
-objectName.addEventListener('change', () => editor.renameSelected(objectName.value));
+elements.fileInput.addEventListener('change', importSelectedFile);
+elements.objectName.addEventListener('change', () => editor.renameSelected(elements.objectName.value));
 
 $$('[data-transform]').forEach((input) => {
   input.addEventListener('focus', () => editor.beginHistory('Transform'));
   input.addEventListener('input', () => {
     const raw = Number(input.value);
     if (!Number.isFinite(raw)) return;
-    const value = input.dataset.angle === 'true' ? raw * DEG2RAD : raw;
-    editor.setTransformValue(input.dataset.transform, value);
+    editor.setTransformValue(input.dataset.transform, input.dataset.angle === 'true' ? raw * DEG2RAD : raw);
   });
   input.addEventListener('change', () => editor.commitHistory());
   input.addEventListener('blur', () => editor.commitHistory());
 });
 
-function beginModalTransform(mode) {
-  if (!editor.selected) {
-    setStatus('Сначала выберите объект');
-    return;
-  }
-  if (modalTransform) cancelModalTransform(true);
-
-  const objects = editor.getSelectedObjects();
-  modalTransform = {
-    mode,
-    axis: null,
-    buffer: '',
-    starts: objects.map((object) => ({
-      object,
-      position: object.position.clone(),
-      rotation: object.rotation.clone(),
-      scale: object.scale.clone(),
-    })),
-  };
-  editor.beginHistory(mode === 'translate' ? 'Move' : mode === 'rotate' ? 'Rotate' : 'Scale');
-  setTransformMode(mode);
-  updateTransformHud();
-}
-
-function updateTransformHud() {
-  if (!modalTransform) {
-    transformHud.hidden = true;
-    return;
-  }
-  const labels = { translate: 'Move', rotate: 'Rotate', scale: 'Scale' };
-  const axis = modalTransform.axis ? ` ${modalTransform.axis.toUpperCase()}` : '';
-  const value = modalTransform.buffer || (modalTransform.mode === 'scale' ? '1' : '0');
-  transformHud.textContent = `${labels[modalTransform.mode]}${axis}: ${value}`;
-  transformHud.hidden = false;
-
-  if ((modalTransform.mode === 'translate' || modalTransform.mode === 'rotate') && !modalTransform.axis) {
-    setStatus(`${labels[modalTransform.mode]} · выберите X/Y/Z, затем введите значение`);
-  } else {
-    setStatus(`${labels[modalTransform.mode]}${axis} · Enter подтвердить · Esc отменить`);
-  }
-}
-
-function resetModalPreview() {
-  if (!modalTransform) return;
-  for (const start of modalTransform.starts) {
-    start.object.position.copy(start.position);
-    start.object.rotation.copy(start.rotation);
-    start.object.scale.copy(start.scale);
-    start.object.updateMatrix();
-  }
-  editor.updateSelectionBoxes();
-  editor.events.onTransform(editor.selected);
-}
-
-function applyModalPreview() {
-  if (!modalTransform) return;
-  resetModalPreview();
-  if (!modalTransform.buffer || modalTransform.buffer === '-' || modalTransform.buffer === '.') return;
-  const value = Number(modalTransform.buffer);
-  if (!Number.isFinite(value)) return;
-
-  const { mode, axis } = modalTransform;
-  if ((mode === 'translate' || mode === 'rotate') && !axis) return;
-
-  for (const start of modalTransform.starts) {
-    if (mode === 'translate') {
-      start.object.position[axis] = start.position[axis] + value;
-    } else if (mode === 'rotate') {
-      start.object.rotation[axis] = start.rotation[axis] + value * DEG2RAD;
-    } else if (mode === 'scale') {
-      if (axis) start.object.scale[axis] = start.scale[axis] * value;
-      else start.object.scale.copy(start.scale).multiplyScalar(value);
-    }
-    start.object.updateMatrix();
-  }
-  editor.updateSelectionBoxes();
-  editor.events.onTransform(editor.selected);
-}
-
-function commitModalTransform() {
-  if (!modalTransform) return;
-  const validNumber = modalTransform.buffer && Number.isFinite(Number(modalTransform.buffer));
-  const hasAxis = modalTransform.mode === 'scale' || Boolean(modalTransform.axis);
-  if (!validNumber || !hasAxis) {
-    cancelModalTransform(true);
-    return;
-  }
-  editor.commitHistory();
-  const summary = transformHud.textContent;
-  modalTransform = null;
-  transformHud.hidden = true;
-  setStatus(`${summary} применено`);
-  scheduleTransformRefresh();
-}
-
-function cancelModalTransform(revert) {
-  if (!modalTransform) return;
-  if (revert) resetModalPreview();
-  editor.cancelHistory();
-  modalTransform = null;
-  transformHud.hidden = true;
-  setStatus('Transform отменён');
-  scheduleTransformRefresh();
-}
-
-function handleModalKey(event) {
-  if (!modalTransform) return false;
-
-  const lower = event.key.toLowerCase();
-  if (['x', 'y', 'z'].includes(lower)) {
-    event.preventDefault();
-    modalTransform.axis = lower;
-    applyModalPreview();
-    updateTransformHud();
-    return true;
-  }
-  if (/^[0-9]$/.test(event.key)) {
-    event.preventDefault();
-    modalTransform.buffer += event.key;
-    applyModalPreview();
-    updateTransformHud();
-    return true;
-  }
-  if (event.key === '.' || event.key === ',') {
-    event.preventDefault();
-    if (!modalTransform.buffer.includes('.')) modalTransform.buffer += '.';
-    applyModalPreview();
-    updateTransformHud();
-    return true;
-  }
-  if (event.key === '-' && !modalTransform.buffer) {
-    event.preventDefault();
-    modalTransform.buffer = '-';
-    applyModalPreview();
-    updateTransformHud();
-    return true;
-  }
-  if (event.key === 'Backspace') {
-    event.preventDefault();
-    modalTransform.buffer = modalTransform.buffer.slice(0, -1);
-    applyModalPreview();
-    updateTransformHud();
-    return true;
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    commitModalTransform();
-    return true;
-  }
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    cancelModalTransform(true);
-    return true;
-  }
-  return false;
-}
-
-window.addEventListener('keydown', (event) => {
-  const target = event.target;
-  const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable;
-  if (typing) return;
-
-  if (handleModalKey(event)) return;
-
-  const commandKey = event.ctrlKey || event.metaKey;
-  if (commandKey && event.code === 'KeyZ') {
-    event.preventDefault();
-    if (event.shiftKey) editor.redo();
-    else editor.undo();
-    return;
-  }
-  if (commandKey && event.code === 'KeyY') {
-    event.preventDefault();
-    editor.redo();
-    return;
-  }
-  if (event.shiftKey && event.code === 'KeyD') {
-    event.preventDefault();
-    editor.duplicateSelected();
-    return;
-  }
-  if (event.shiftKey && event.code === 'KeyA') {
-    event.preventDefault();
-    $('#add-menu').setAttribute('open', '');
-    return;
-  }
-  if (commandKey && event.code === 'KeyJ') {
-    event.preventDefault();
-    editor.joinSelected();
-    return;
-  }
-  if (commandKey && event.code === 'KeyP') {
-    event.preventDefault();
-    editor.parentSelected();
-    return;
-  }
-  if (event.altKey && event.code === 'KeyP') {
-    event.preventDefault();
-    editor.clearParent();
-    return;
-  }
-  if (commandKey && event.code === 'KeyA') {
-    event.preventDefault();
-    editor.applyTransform();
-    return;
-  }
-  if (event.shiftKey && event.code === 'Tab') {
-    event.preventDefault();
-    snapButton.click();
-    return;
-  }
-  if (commandKey || event.altKey) return;
-
-  switch (event.code) {
-    case 'KeyG':
-      event.preventDefault();
-      beginModalTransform('translate');
-      break;
-    case 'KeyR':
-      event.preventDefault();
-      beginModalTransform('rotate');
-      break;
-    case 'KeyS':
-      event.preventDefault();
-      beginModalTransform('scale');
-      break;
-    case 'KeyX':
-    case 'Delete':
-      event.preventDefault();
-      editor.deleteSelected();
-      break;
-    case 'Home':
-      event.preventDefault();
-      editor.frameAll();
-      break;
-    case 'NumpadDecimal':
-      event.preventDefault();
-      editor.frameSelected();
-      break;
-    case 'Numpad1':
-      event.preventDefault();
-      editor.setView('front');
-      break;
-    case 'Numpad3':
-      event.preventDefault();
-      editor.setView('right');
-      break;
-    case 'Numpad7':
-      event.preventDefault();
-      editor.setView('top');
-      break;
-    default:
-      break;
-  }
+bindKeyboard({
+  editor,
+  editMode,
+  transformModal,
+  snapButton,
+  requestNumber,
+  openAddMenu: () => $('#add-menu').setAttribute('open', ''),
 });
 
 scheduleRefresh();
 refreshIcons();
-setStatus('Готово · Shift+Click multi-select · G/R/S numeric transform · Ctrl+Z Undo');
+setStatus('Готово · Tab Edit Mode · 1/2/3 Vertex/Edge/Face · G/R/S transform');
