@@ -8,6 +8,7 @@ import {
   Evaluator,
 } from 'three-bvh-csg';
 import { readMeshTopology } from '../edit/topology.js';
+import { disposeGeometryIfUnreferenced } from '../runtime/resource-ownership.js';
 
 const OPERATIONS = {
   union: ADDITION,
@@ -17,7 +18,7 @@ const OPERATIONS = {
 const BOOLEAN_ATTRIBUTES = new Set(['position', 'normal', 'uv']);
 
 function isRegularMesh(object) {
-  return object?.isMesh && !object.isSkinnedMesh && object.geometry?.getAttribute('position');
+  return object?.isMesh && !object.isSkinnedMesh && !object.isInstancedMesh && object.geometry?.getAttribute('position');
 }
 
 function unsupportedAttributes(mesh) {
@@ -76,7 +77,7 @@ export function applyBoolean(modifiers, operation = 'difference') {
   const active = modifiers.editor.selected;
   const selected = modifiers.editor.getSelectedObjects().filter(isRegularMesh);
   if (!isRegularMesh(active) || selected.length !== 2 || !selected.includes(active)) {
-    modifiers.onStatus('Boolean: выделите ровно 2 обычных Mesh; активный объект — A, второй — B');
+    modifiers.onStatus('Boolean: выделите ровно 2 обычных non-instanced Mesh; активный объект — A, второй — B');
     return false;
   }
   const operand = selected.find((mesh) => mesh !== active);
@@ -130,8 +131,9 @@ export function applyBoolean(modifiers, operation = 'difference') {
     geometry.computeBoundingSphere();
 
     modifiers.editor.checkpoint(`Boolean ${operation}`);
-    active.geometry.dispose();
+    const source = active.geometry;
     active.geometry = geometry;
+    disposeGeometryIfUnreferenced(modifiers.editor, source);
     modifiers.editor.select(active);
     modifiers.editor.events.onStructure();
     modifiers.editor.events.onTransform(active);
