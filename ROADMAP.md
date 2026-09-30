@@ -17,6 +17,7 @@
 - [x] Duplicate, Join, Separate, Apply Transform, Origin/Pivot.
 - [x] Blender-подобный ввод `G X 2`, `R Z 90`, `S 2`.
 - [x] Базовый snapping к сетке.
+- [x] Scene/Camera state входит в Undo / Redo: фон, exposure, камера, orbit target и рабочее освещение.
 
 ## Этап 2 — Edit Mode
 - [x] Переключение Object / Edit через `Tab`.
@@ -29,7 +30,7 @@
 - [x] Bevel Face (базовый) и Dissolve Vertex / Edge.
 - [x] Loop Cut по quad-strip.
 - [x] Интерактивный Knife: сегмент между двумя точками на граничных рёбрах одной грани.
-- [x] Сохранение UV и дополнительных BufferAttributes при topology-editing; новые corner-значения интерполируются. Skinned Mesh не редактируется, tangents после изменения топологии не переиспользуются.
+- [x] Сохранение UV и дополнительных BufferAttributes при topology-editing; новые corner-значения интерполируются. Skinned Mesh и Morph Mesh не допускаются в destructive Edit Mode, если операция потеряет связанные данные.
 
 ## Этап 3 — Modifiers
 - [x] Mirror X / Y / Z.
@@ -40,7 +41,7 @@
 - [x] Decimate через Three.js SimplifyModifier + Triangulate / Normalize.
 - [x] Boolean Union / Difference / Intersect для watertight/two-manifold Mesh через three-bvh-csg. Cutter сохраняется.
 
-Модификаторы на текущем этапе применяются destructive-операцией с общей Undo/Redo историей. QA-защита блокирует Decimate/Boolean/Join, если текущая реализация потеряет UV, custom attributes, morph data или material groups. Данные не должны удаляться молча.
+Модификаторы на текущем этапе применяются destructive-операцией с общей Undo/Redo историей. QA-защита блокирует Decimate/Boolean/Join и destructive modifiers, если текущая реализация потеряет UV, custom attributes, morph data или material groups. Данные не должны удаляться молча.
 
 ## Этап 4 — UV Editing
 - [x] Отдельный workspace UV Editing с UV canvas и существующим Three.js viewport без второго renderer.
@@ -60,6 +61,7 @@ UV Editing работает непосредственно с `geometry.attribut
 - [x] Загрузка, замена и очистка текстур PNG/JPEG/WebP.
 - [x] Material Preview во viewport.
 - [x] Texture Offset / Scale / Rotation и Base Color preview в UV Editor.
+- [x] Shared textures освобождаются только после проверки ссылок остальных Mesh.
 
 Материал редактируется непосредственно на Mesh, поэтому параметры и карты передаются существующему `GLTFExporter`. Для multi-material Mesh на текущем этапе Material Properties редактирует первый material slot.
 
@@ -67,14 +69,16 @@ UV Editing работает непосредственно с `geometry.attribut
 - [x] Локальные именованные проекты через IndexedDB.
 - [x] Debounced autosave и восстановление последней сессии.
 - [x] Собственный бинарный `.gluestack`: GLB + редакторские метаданные (камера, selection, snap, userData/extras).
+- [x] History snapshots клонируют Skinned hierarchy через `SkeletonUtils.clone`, а CanvasTexture — отдельным canvas snapshot.
 
 Один и тот же project container используется для скачиваемого файла и IndexedDB, поэтому локальный snapshot и файл проекта не расходятся по формату. Текстуры хранятся внутри вложенного GLB.
 
 ## Этап 7 — Game Ready
 - [x] Статистика meshes / vertices / triangles / materials / textures и оценка texture RAM.
 - [x] Проверка missing normals, non-unit scale, пустых meshes, NaN/Infinity и слишком крупных текстур.
-- [x] Optimize Scene: merge compatible vertices, recalculated normals и dedup эквивалентных материалов.
+- [x] Optimize Scene: merge compatible vertices, сохранение валидных normals и dedup эквивалентных материалов.
 - [x] Генерация LOD0/LOD1/LOD2 и расчёт реального размера итогового `.glb` через `GLTFExporter`.
+- [x] Diagnostics проверяет GLB export→parse и сохранность UV/PBR/texture slots/extras, а также `.gluestack` metadata.
 
 LOD-уровни получают `userData.gluestackLOD`; LOD1/LOD2 скрываются во viewport, но остаются в сцене. Текущий SimplifyModifier допускается только для geometry, где не будут потеряны UV/custom/morph данные; для production textured mesh нужен отдельный UV-safe LOD pipeline.
 
@@ -90,6 +94,7 @@ Texture Paint в текущей версии ориентирован на Base 
 - [x] Runtime failure isolation: сбой дополнительного feature-модуля не должен валить Object/Edit Mode.
 - [x] Safe disposal shared geometry/material/texture resources.
 - [x] Защита destructive-операций от молчаливой потери glTF attributes.
+- [ ] Полноценный animation clip import/export/project/history pipeline. До его реализации анимированные glTF блокируются на импорте, чтобы не потерять clips при экспорте.
 - [ ] UV-safe Decimate/LOD для текстурированных production mesh.
 - [ ] Неразрушающий modifier stack, сохраняемый в `.gluestack`.
 - [ ] Multi-material editing по material slots.
