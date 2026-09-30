@@ -136,7 +136,7 @@ function installProjectState(editor, projects) {
   };
 }
 
-function installPropertiesCoordinator(editor) {
+function installPropertiesCoordinator(editor, editMode) {
   const tabs = document.querySelector('.properties-tabs');
   const content = document.querySelector('.properties-content');
   if (!tabs || !content || tabs.dataset.gluestackCoordinated === 'true') return;
@@ -151,7 +151,24 @@ function installPropertiesCoordinator(editor) {
     const modifiers = document.querySelector('#modifier-properties');
     const empty = document.querySelector('#empty-properties');
 
+    if (editMode?.active) {
+      if (material) material.hidden = true;
+      if (gameReady) gameReady.hidden = true;
+      return;
+    }
+
     if (active.dataset.propertyTab === 'material' && material) {
+      if (!editor.selected?.isMesh) {
+        material.hidden = true;
+        if (gameReady) gameReady.hidden = true;
+        if (object) object.hidden = true;
+        if (modifiers) modifiers.hidden = true;
+        if (empty) {
+          empty.hidden = false;
+          empty.textContent = 'Выберите Mesh';
+        }
+        return;
+      }
       if (empty) empty.hidden = true;
       if (object) object.hidden = true;
       if (modifiers) modifiers.hidden = true;
@@ -185,10 +202,10 @@ function installPropertiesCoordinator(editor) {
   }
 }
 
-export function installRuntimeHardening({ editor, projects }) {
+export function installRuntimeHardening({ editor, projects, editMode }) {
   installDeepHistory(editor);
   installProjectState(editor, projects);
-  installPropertiesCoordinator(editor);
+  installPropertiesCoordinator(editor, editMode);
   updateSceneInputs(editor);
   return { updateSceneInputs: () => updateSceneInputs(editor) };
 }
