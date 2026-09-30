@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { faceAttributeMaps } from './attributes.js';
 import {
   boundaryEdgesForTriangles,
   cloneTriangle,
@@ -42,11 +43,14 @@ export function dissolveSelected(controller) {
 
     controller.editor.checkpoint('Dissolve vertex');
     const triangles = controller.triangles.filter((_, index) => !incident.has(index)).map(cloneTriangle);
+    const attrMaps = faceAttributeMaps({ triangles: [...incident] }, controller.triangles);
     triangles.push(...triangulateLoop(
       loop,
       averageNormal(incident, controller.triangles, controller.vertices),
       [...materials][0],
       controller.vertices,
+      null,
+      attrMaps,
     ));
     controller.rebuildMesh(triangles);
     controller.status('Вершина растворена');
@@ -88,7 +92,15 @@ export function dissolveSelected(controller) {
 
     controller.editor.checkpoint('Dissolve edge');
     const triangles = controller.triangles.filter((_, index) => !pair.has(index)).map(cloneTriangle);
-    triangles.push(...triangulateLoop(loop, triangleNormal(a, controller.vertices), a.materialIndex ?? 0, controller.vertices));
+    const attrMaps = faceAttributeMaps({ triangles: [aIndex, bIndex] }, controller.triangles);
+    triangles.push(...triangulateLoop(
+      loop,
+      triangleNormal(a, controller.vertices),
+      a.materialIndex ?? 0,
+      controller.vertices,
+      null,
+      attrMaps,
+    ));
     controller.rebuildMesh(triangles);
     controller.status('Ребро растворено и quad перетриангулирован');
     return true;
