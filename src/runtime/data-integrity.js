@@ -1,5 +1,4 @@
 const JOIN_SAFE_ATTRIBUTES = new Set(['position', 'normal', 'uv']);
-const SIMPLIFY_SAFE_ATTRIBUTES = new Set(['position', 'uv', 'normal', 'tangent', 'color']);
 
 function morphData(mesh) {
   if (mesh?.morphTargetInfluences?.length) return true;
@@ -10,7 +9,7 @@ function extraAttributes(mesh, allowed) {
   return Object.keys(mesh?.geometry?.attributes ?? {}).filter((name) => !allowed.has(name));
 }
 
-export function installDataIntegrity({ editor, editMode, gameReady }) {
+export function installDataIntegrity({ editor, editMode }) {
   if (!editor || editor.__gluestackIntegrityGuards) return null;
   editor.__gluestackIntegrityGuards = true;
 
@@ -48,37 +47,8 @@ export function installDataIntegrity({ editor, editMode, gameReady }) {
     return originalJoin();
   };
 
-  const controller = gameReady?.controller;
-  if (controller?.generateLOD) {
-    const originalGenerateLOD = controller.generateLOD.bind(controller);
-    controller.generateLOD = (...args) => {
-      const mesh = editor.selected;
-      if (mesh?.isMesh) {
-        if (mesh.isInstancedMesh) {
-          controller.status('LOD отменён: InstancedMesh требует instance-aware LOD pipeline');
-          return false;
-        }
-        const extras = extraAttributes(mesh, SIMPLIFY_SAFE_ATTRIBUTES);
-        if (extras.length) {
-          controller.status(`LOD отменён: Three.js r180 SimplifyModifier не сохраняет атрибуты ${extras.join(', ')}`);
-          return false;
-        }
-        if (morphData(mesh)) {
-          controller.status('LOD отменён: morph targets требуют отдельного LOD pipeline');
-          return false;
-        }
-        if (Array.isArray(mesh.material) && mesh.material.length > 1) {
-          controller.status('LOD отменён: multi-material geometry groups не сохраняются SimplifyModifier r180');
-          return false;
-        }
-      }
-      return originalGenerateLOD(...args);
-    };
-  }
-
   return {
     editGuarded: Boolean(editMode?.enter),
     joinGuarded: true,
-    lodGuarded: Boolean(controller?.generateLOD),
   };
 }
