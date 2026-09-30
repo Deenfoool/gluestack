@@ -93,15 +93,16 @@ LOD-уровни получают `userData.gluestackLOD`; LOD1/LOD2 скрыв�
 - [x] Animation clip import/export/project/history round-trip через штатный `GLTFExporter.animations`.
 - [x] Animation preview: список clips, Play/Stop и скорость.
 - [x] Rename retargets animation track paths; Delete/Join/Separate удаляют tracks только для реально исчезнувших узлов.
+- [x] Базовый Transform Keyframe Editor: Create/Delete Clip, time scrub и Position/Quaternion/Scale keys выбранного объекта с Undo/Redo.
 
-Animation pipeline сейчас сохраняет и проигрывает существующие clips. Полноценный keyframe/timeline editor пока не реализован.
+Animation pipeline сохраняет и проигрывает clips и теперь умеет создавать transform-анимацию. Полноценный Dope Sheet/Graph Editor, удаление отдельных keys и редактирование interpolation остаются отдельным этапом.
 
 ## После MVP
 - [ ] Полный browser smoke-test всех workspaces и операций на GitHub Pages.
 - [x] Runtime failure isolation: сбой дополнительного feature-модуля не должен валить Object/Edit Mode.
 - [x] Safe disposal shared geometry/material/texture resources.
 - [x] Защита destructive-операций от молчаливой потери glTF attributes.
-- [ ] Timeline/keyframe editor для создания и редактирования animation clips.
+- [ ] Advanced animation editor: Dope Sheet, удаление/перемещение отдельных keyframes, interpolation/easing.
 - [ ] Multi-material-aware LOD/Decimate с сохранением geometry groups.
 - [ ] Неразрушающий modifier stack, сохраняемый в `.gluestack`.
 - [ ] Texture Paint для Normal / Roughness / Metallic / Emissive.
