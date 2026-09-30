@@ -19,6 +19,18 @@ function safeName(value) {
   return (value || 'project').trim().replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').slice(0, 80) || 'project';
 }
 
+function isolateEditableResources(root) {
+  root?.traverse?.((object) => {
+    if (!object.isMesh || object.isSkinnedMesh) return;
+    if (object.geometry?.clone) object.geometry = object.geometry.clone();
+    if (Array.isArray(object.material)) {
+      object.material = object.material.map((material) => material?.clone?.() ?? material);
+    } else if (object.material?.clone) {
+      object.material = object.material.clone();
+    }
+  });
+}
+
 export class ProjectController {
   constructor(editor, onStatus = null) {
     this.editor = editor;
@@ -110,6 +122,7 @@ export class ProjectController {
     const gltf = await new Promise((resolve, reject) => {
       this.editor.loader.parse(buffer, '', resolve, (error) => reject(error instanceof Error ? error : new Error(String(error))));
     });
+    isolateEditableResources(gltf.scene);
 
     this.editor.clearSelection();
     for (const child of [...this.editor.modelRoot.children]) {
