@@ -16,6 +16,10 @@ export function installDataIntegrity({ editor, editMode }) {
   if (editMode?.enter) {
     const originalEnter = editMode.enter.bind(editMode);
     editMode.enter = (mesh = editor.selected) => {
+      if (editor.modifierStack?.hasStack?.(mesh)) {
+        editor.events.onStatus('Edit Mode отменён: сначала Apply Stack или Clear Stack');
+        return false;
+      }
       if (mesh?.isInstancedMesh) {
         editor.events.onStatus('Edit Mode отменён: InstancedMesh требует отдельного instance-aware editor');
         return false;
@@ -31,6 +35,10 @@ export function installDataIntegrity({ editor, editMode }) {
   const originalJoin = editor.joinSelected.bind(editor);
   editor.joinSelected = () => {
     const meshes = editor.getTopLevelSelection().filter((object) => object.isMesh && !object.isSkinnedMesh);
+    if (editor.modifierStack?.hasStack && meshes.some((mesh) => editor.modifierStack.hasStack(mesh))) {
+      editor.events.onStatus('Join отменён: сначала Apply Stack или Clear Stack на выбранных Mesh');
+      return false;
+    }
     if (meshes.some((mesh) => mesh.isInstancedMesh)) {
       editor.events.onStatus('Join отменён: InstancedMesh нельзя объединять обычным mesh pipeline');
       return false;
@@ -50,5 +58,6 @@ export function installDataIntegrity({ editor, editMode }) {
   return {
     editGuarded: Boolean(editMode?.enter),
     joinGuarded: true,
+    modifierStackGuarded: true,
   };
 }
