@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SimplifyModifier } from 'three/addons/modifiers/SimplifyModifier.js';
+import { disposeGeometryIfUnreferenced } from '../runtime/resource-ownership.js';
 
 const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap'];
 
@@ -53,6 +54,18 @@ function materialKey(material) {
 function hasMorphTargets(mesh) {
   if (mesh.morphTargetInfluences?.length) return true;
   return Object.values(mesh.geometry?.morphAttributes ?? {}).some((attributes) => attributes?.length);
+}
+
+function normalsAreValid(geometry) {
+  const normal = geometry.getAttribute('normal');
+  if (!normal || normal.count !== geometry.getAttribute('position')?.count) return false;
+  for (let i = 0; i < normal.count; i += 1) {
+    const x = normal.getX(i);
+    const y = normal.getY(i);
+    const z = normal.getZ(i);
+    if (![x, y, z].every(Number.isFinite) || (x * x + y * y + z * z) < 1e-12) return false;
+  }
+  return true;
 }
 
 export class GameReadyController {
@@ -141,34 +154,45 @@ export class GameReadyController {
       const source = mesh.geometry;
       if (!source?.getAttribute('position')) continue;
       let geometry = source.clone();
-      try { geometry = mergeVertices(geometry, 1e-5); } catch {}
-      if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
-      else {
-        geometry.computeVertexNormals();
-        geometry.normalizeNormals();
-      }
+      try {
+        const merged = mergeVertices(geometry, 1e-5);
+        if (merged !== geometry) geometry.dispose();
+        geometry = merged;
+      } catch {}
+      if (!normalsAreValid(geometry)) geometry.computeVertexNormals();
+      else geometry.normalizeNormals();
       geometry.computeBoundingBox();
       geometry.computeBoundingSphere();
-      source.dispose();
       mesh.geometry = geometry;
+      disposeGeometryIfUnreferenced(this.editor, source);
     }
 
     const canonical = new Map();
+    const replacedMaterials = new Set();
     this.editor.modelRoot.traverse((object) => {
       if (!object.isMesh) return;
       if (Array.isArray(object.material)) {
         object.material = object.material.map((material) => {
           const key = materialKey(material);
-          if (canonical.has(key)) return canonical.get(key);
+          if (canonical.has(key)) {
+            const replacement = canonical.get(key);
+            if (replacement !== material) replacedMaterials.add(material);
+            return replacement;
+          }
           canonical.set(key, material);
           return material;
         });
       } else if (object.material) {
         const key = materialKey(object.material);
-        if (canonical.has(key)) object.material = canonical.get(key);
-        else canonical.set(key, object.material);
+        if (canonical.has(key)) {
+          const old = object.material;
+          object.material = canonical.get(key);
+          if (object.material !== old) replacedMaterials.add(old);
+        } else canonical.set(key, object.material);
       }
     });
+    replacedMaterials.forEach((material) => material?.dispose?.());
+
     this.editor.refreshSelectionVisuals();
     this.editor.events.onStructure();
     this.editor.events.onTransform(this.editor.selected);
