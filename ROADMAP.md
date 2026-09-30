@@ -9,6 +9,7 @@
 - [x] Выбор объектов и Move / Rotate / Scale gizmo.
 - [x] Создание базовых примитивов.
 - [x] Импорт `.glb/.gltf` и экспорт `.glb`.
+- [x] `.gltf` с внешними `.bin`/текстурами через multi-file import и локальный URL resolver.
 
 ## Этап 1 — Object Mode
 - [x] Undo / Redo с общей историей операций.
@@ -39,7 +40,7 @@
 - [x] Decimate через Three.js SimplifyModifier + Triangulate / Normalize.
 - [x] Boolean Union / Difference / Intersect для watertight/two-manifold Mesh через three-bvh-csg. Cutter сохраняется.
 
-Модификаторы на текущем этапе применяются destructive-операцией с общей Undo/Redo историей. Неразрушающий стек будет логично добавлять вместе с полноценным форматом проекта, чтобы параметры стека корректно сохранялись между сессиями.
+Модификаторы на текущем этапе применяются destructive-операцией с общей Undo/Redo историей. QA-защита блокирует Decimate/Boolean/Join, если текущая реализация потеряет UV, custom attributes, morph data или material groups. Данные не должны удаляться молча.
 
 ## Этап 4 — UV Editing
 - [x] Отдельный workspace UV Editing с UV canvas и существующим Three.js viewport без второго renderer.
@@ -75,7 +76,7 @@ UV Editing работает непосредственно с `geometry.attribut
 - [x] Optimize Scene: merge compatible vertices, recalculated normals и dedup эквивалентных материалов.
 - [x] Генерация LOD0/LOD1/LOD2 и расчёт реального размера итогового `.glb` через `GLTFExporter`.
 
-LOD-уровни получают `userData.gluestackLOD`; LOD1/LOD2 скрываются во viewport, но остаются в сцене и экспортируются для дальнейшего выбора игровым runtime.
+LOD-уровни получают `userData.gluestackLOD`; LOD1/LOD2 скрываются во viewport, но остаются в сцене. Текущий SimplifyModifier допускается только для geometry, где не будут потеряны UV/custom/morph данные; для production textured mesh нужен отдельный UV-safe LOD pipeline.
 
 ## Этап 8 — расширение
 - [x] Texture Paint по Base Color прямо на 3D-модели через raycast + UV; настройки Color / Size / Strength.
@@ -86,6 +87,10 @@ Texture Paint в текущей версии ориентирован на Base 
 
 ## После MVP
 - [ ] Полный browser smoke-test всех workspaces и операций на GitHub Pages.
+- [x] Runtime failure isolation: сбой дополнительного feature-модуля не должен валить Object/Edit Mode.
+- [x] Safe disposal shared geometry/material/texture resources.
+- [x] Защита destructive-операций от молчаливой потери glTF attributes.
+- [ ] UV-safe Decimate/LOD для текстурированных production mesh.
 - [ ] Неразрушающий modifier stack, сохраняемый в `.gluestack`.
 - [ ] Multi-material editing по material slots.
 - [ ] Texture Paint для Normal / Roughness / Metallic / Emissive.
