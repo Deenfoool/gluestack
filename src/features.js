@@ -28,6 +28,6 @@ export function installFeatures({ editor, editMode, knifeTool, requestNumber }) 
     document.querySelectorAll('.workspace-tab').forEach((item) => item.classList.toggle('active', item === tab));
   });
 
-  const hardening = installRuntimeHardening({ editor, projects });
+  const hardening = installRuntimeHardening({ editor, projects, editMode });
   return { uv, materials, projects, gameReady, paint, procedural, scene, hardening };
 }
