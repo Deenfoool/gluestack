@@ -7,8 +7,10 @@ import { installProceduralGenerators } from './procedural/integration.js';
 import { installSceneControls } from './scene/integration.js';
 import { installRuntimeHardening } from './runtime/hardening.js';
 import { installDiagnostics } from './runtime/diagnostics.js';
+import { installResourceOwnership } from './runtime/resource-ownership.js';
 
 export function installFeatures({ editor, editMode, knifeTool, requestNumber }) {
+  const resources = installResourceOwnership(editor);
   const uv = installUVWorkspace({ editor, editMode, knifeTool, requestNumber });
   const materials = installMaterialPanel({ editor });
   const projects = installProjects({ editor, editMode, knifeTool });
@@ -30,7 +32,7 @@ export function installFeatures({ editor, editMode, knifeTool, requestNumber }) 
   });
 
   const hardening = installRuntimeHardening({ editor, projects, editMode });
-  const installed = { uv, materials, projects, gameReady, paint, procedural, scene, hardening };
+  const installed = { uv, materials, projects, gameReady, paint, procedural, scene, hardening, resources };
   const diagnostics = installDiagnostics({ editor, projects, features: installed });
   return { ...installed, diagnostics };
 }
