@@ -1,14 +1,9 @@
-import { SimplifyModifier } from 'three/addons/modifiers/SimplifyModifier.js';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cloneTriangle, readMeshTopology } from '../edit/topology.js';
 import { disposeGeometryIfUnreferenced } from '../runtime/resource-ownership.js';
-
-const DECIMATE_SAFE_ATTRIBUTES = new Set(['position', 'uv', 'normal', 'tangent', 'color']);
-
-function hasMorphData(mesh) {
-  if (mesh.morphTargetInfluences?.length) return true;
-  return Object.values(mesh.geometry?.morphAttributes ?? {}).some((items) => items?.length);
-}
+import {
+  simplifyCompatibilityIssue,
+  simplifyGeometryPreservingGroups,
+} from '../runtime/simplify-geometry.js';
 
 export function applyTriangulate(modifiers) {
   const mesh = modifiers.getMesh();
@@ -27,39 +22,22 @@ export async function applyDecimate(modifiers, ratio = 0.5) {
     modifiers.onStatus('Decimate: ratio должен быть между 0 и 1');
     return false;
   }
-  if (Array.isArray(mesh.material) && mesh.material.length > 1) {
-    modifiers.onStatus('Decimate: multi-material Mesh пока не поддерживается — SimplifyModifier r180 не сохраняет geometry groups');
-    return false;
-  }
-  if (hasMorphData(mesh)) {
-    modifiers.onStatus('Decimate отменён: morph targets требуют отдельного safe pipeline');
-    return false;
-  }
-  const unsupported = Object.keys(mesh.geometry.attributes).filter((name) => !DECIMATE_SAFE_ATTRIBUTES.has(name));
-  if (unsupported.length) {
-    modifiers.onStatus(`Decimate отменён: Three.js r180 SimplifyModifier не сохраняет атрибуты ${unsupported.join(', ')}`);
+
+  const issue = simplifyCompatibilityIssue(mesh);
+  if (issue) {
+    modifiers.onStatus(`Decimate отменён: ${issue}`);
     return false;
   }
 
-  let geometry = mesh.geometry.clone();
   try {
-    if (!geometry.index) {
-      const indexed = mergeVertices(geometry, 1e-5);
-      geometry.dispose();
-      geometry = indexed;
-    }
-    const position = geometry.getAttribute('position');
+    const position = mesh.geometry.getAttribute('position');
     if (!position || position.count < 8) {
       modifiers.onStatus('Decimate: геометрия слишком маленькая');
-      geometry.dispose();
       return false;
     }
 
-    const removeCount = Math.max(1, Math.min(position.count - 4, Math.floor(position.count * (1 - ratio))));
     modifiers.onStatus(`Decimate · упрощение до ~${Math.round(ratio * 100)}%…`);
-    const simplifier = new SimplifyModifier();
-    const simplified = await simplifier.modify(geometry, removeCount);
-    geometry.dispose();
+    const { geometry: simplified, groupCount } = simplifyGeometryPreservingGroups(mesh.geometry, ratio);
 
     if (modifiers.editor.selected !== mesh || !mesh.parent) {
       simplified.dispose();
@@ -79,10 +57,9 @@ export async function applyDecimate(modifiers, ratio = 0.5) {
     modifiers.editor.events.onTransform(mesh);
     modifiers.editor.events.onStructure();
     const uvKept = Boolean(mesh.geometry.getAttribute('uv'));
-    modifiers.onStatus(`Decimate применён · цель ~${Math.round(ratio * 100)}%${uvKept ? ' · UV сохранён' : ''}`);
+    modifiers.onStatus(`Decimate применён · цель ~${Math.round(ratio * 100)}%${uvKept ? ' · UV сохранён' : ''}${groupCount ? ` · material groups ${groupCount}` : ''}`);
     return true;
   } catch (error) {
-    geometry?.dispose?.();
     console.error(error);
     modifiers.onStatus(`Decimate не выполнен: ${error.message || error}`);
     return false;
