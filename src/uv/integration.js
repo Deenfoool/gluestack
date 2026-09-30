@@ -104,6 +104,8 @@ export function installUVWorkspace({ editor, editMode, knifeTool, requestNumber 
     previewHost.appendChild(viewport);
     active = true;
     controller.open(editor.selected);
+    const material = Array.isArray(editor.selected.material) ? editor.selected.material[0] : editor.selected.material;
+    if (material?.map?.image) controller.textureImage = material.map.image;
     requestAnimationFrame(() => {
       editor.resize();
       controller.resize();
@@ -233,6 +235,12 @@ export function installUVWorkspace({ editor, editMode, knifeTool, requestNumber 
       controller.render(); controller.updateInfo();
     }
   }, { capture: true });
+
+  window.addEventListener('gluestack:texture-changed', (event) => {
+    if (event.detail?.mesh !== controller.mesh || event.detail?.key !== 'map') return;
+    controller.textureImage = event.detail.texture?.image ?? null;
+    controller.render();
+  });
 
   refreshIcons();
   return { controller, enter, leave, get active() { return active; } };
