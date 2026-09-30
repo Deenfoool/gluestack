@@ -182,13 +182,37 @@ export function installUVWorkspace({ editor, editMode, knifeTool, requestNumber 
     const mark = document.createElement('button');
     mark.type = 'button';
     mark.dataset.uvMarkSeam = '';
-    mark.innerHTML = '<i data-lucide="scissors-line-dashed"></i><span>Mark UV Seam</span><kbd>Edge Select</kbd>';
+    mark.innerHTML = '<i data-lucide="scissors"></i><span>Mark UV Seam</span><kbd>Edge Select</kbd>';
     mark.addEventListener('click', () => {
       controller.mesh = editMode.mesh;
       controller.loadSeams();
       controller.markSeamsFromEditMode(editMode);
     });
-    meshMenu.append(separator, mark);
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.dataset.uvClearSeam = '';
+    clear.innerHTML = '<i data-lucide="eraser"></i><span>Clear UV Seam</span><kbd>Edge Select</kbd>';
+    clear.addEventListener('click', () => {
+      if (!editMode.active || editMode.selectionMode !== 'edge' || !editMode.selectedEdges.size) {
+        setStatus('Clear Seam: в Edit Mode выделите рёбра');
+        return;
+      }
+      controller.mesh = editMode.mesh;
+      controller.loadSeams();
+      editor.checkpoint('Clear UV seam');
+      const pkey = (v) => `${Math.round(v.x / 1e-5)}:${Math.round(v.y / 1e-5)}:${Math.round(v.z / 1e-5)}`;
+      let removed = 0;
+      for (const edge of editMode.edges) {
+        if (!editMode.selectedEdges.has(edge.key)) continue;
+        const ka = pkey(editMode.vertices[edge.a].position);
+        const kb = pkey(editMode.vertices[edge.b].position);
+        const key = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+        if (controller.seams.delete(key)) removed += 1;
+      }
+      controller.saveSeams();
+      setStatus(`Clear Seam · удалено ${removed}`);
+    });
+    meshMenu.append(separator, mark, clear);
   }
 
   window.addEventListener('keydown', (event) => {
