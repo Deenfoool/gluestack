@@ -28,7 +28,7 @@
 - [x] Bevel Face (базовый) и Dissolve Vertex / Edge.
 - [x] Loop Cut по quad-strip.
 - [x] Интерактивный Knife: сегмент между двумя точками на граничных рёбрах одной грани.
-- [ ] Улучшить операции topology-editing с сохранением дополнительных custom vertex attributes импортированных GLB.
+- [x] Сохранение UV и дополнительных BufferAttributes при topology-editing; новые corner-значения интерполируются. Skinned Mesh не редактируется, tangents после изменения топологии не переиспользуются.
 
 ## Этап 3 — Modifiers
 - [ ] Mirror.
