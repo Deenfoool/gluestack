@@ -1,8 +1,11 @@
 import { bevelFace } from './edit/bevel.js';
 import { dissolveSelected } from './edit/dissolve.js';
 import { loopCut } from './edit/cuts.js';
+import { installUVWorkspace } from './uv/integration.js';
 
 export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snapButton, openAddMenu, requestNumber }) {
+  installUVWorkspace({ editor, editMode, knifeTool, requestNumber });
+
   window.addEventListener('keydown', (event) => {
     const target = event.target;
     const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable;
