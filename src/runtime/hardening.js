@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { clone as cloneSkeletonHierarchy } from 'three/addons/utils/SkeletonUtils.js';
 
 const TEXTURE_KEYS = [
   'map', 'alphaMap', 'aoMap', 'bumpMap', 'normalMap', 'displacementMap',
@@ -43,21 +44,23 @@ function cloneMaterial(material, textureCache) {
 function makeDeepClone(editor) {
   return function cloneObjectDeep(source) {
     const textureCache = new Map();
+    const clonedRoot = cloneSkeletonHierarchy(source);
+    const sourceNodes = [];
+    const clonedNodes = [];
+    source.traverse((node) => sourceNodes.push(node));
+    clonedRoot.traverse((node) => clonedNodes.push(node));
 
-    const cloneNode = (node) => {
-      const clone = node.clone(false);
-      clone.clear();
+    for (let index = 0; index < Math.min(sourceNodes.length, clonedNodes.length); index += 1) {
+      const node = sourceNodes[index];
+      const clone = clonedNodes[index];
       if (node.geometry) clone.geometry = node.geometry.clone();
       if (node.material) {
         clone.material = Array.isArray(node.material)
           ? node.material.map((material) => cloneMaterial(material, textureCache))
           : cloneMaterial(node.material, textureCache);
       }
-      for (const child of node.children) clone.add(cloneNode(child));
-      return clone;
-    };
-
-    return cloneNode(source);
+    }
+    return clonedRoot;
   }.bind(editor);
 }
 
