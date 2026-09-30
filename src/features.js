@@ -8,6 +8,7 @@ import { installSceneControls } from './scene/integration.js';
 import { installRuntimeHardening } from './runtime/hardening.js';
 import { installDiagnostics } from './runtime/diagnostics.js';
 import { installResourceOwnership } from './runtime/resource-ownership.js';
+import { installImportPipeline } from './runtime/importer.js';
 
 function safeInstall(editor, name, factory) {
   try {
@@ -21,6 +22,7 @@ function safeInstall(editor, name, factory) {
 
 export function installFeatures({ editor, editMode, knifeTool, requestNumber }) {
   const resources = safeInstall(editor, 'Resource ownership', () => installResourceOwnership(editor));
+  const importer = safeInstall(editor, 'GLTF importer', () => installImportPipeline({ editor, editMode, knifeTool }));
   const uv = safeInstall(editor, 'UV Editing', () => installUVWorkspace({ editor, editMode, knifeTool, requestNumber }));
   const materials = safeInstall(editor, 'Materials', () => installMaterialPanel({ editor }));
   const projects = safeInstall(editor, 'Projects', () => installProjects({ editor, editMode, knifeTool }));
@@ -42,7 +44,7 @@ export function installFeatures({ editor, editMode, knifeTool, requestNumber }) 
   });
 
   const hardening = safeInstall(editor, 'Runtime hardening', () => installRuntimeHardening({ editor, projects, editMode }));
-  const installed = { uv, materials, projects, gameReady, paint, procedural, scene, hardening, resources };
+  const installed = { uv, materials, projects, gameReady, paint, procedural, scene, hardening, resources, importer };
   const diagnostics = safeInstall(editor, 'Diagnostics', () => installDiagnostics({ editor, projects, features: installed }));
   return { ...installed, diagnostics };
 }
