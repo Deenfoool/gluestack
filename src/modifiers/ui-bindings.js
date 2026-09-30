@@ -42,6 +42,12 @@ async function runBoolean(modifiers, operation) {
 export function bindModifierControls(modifiers, root = document) {
   modifiers.stackReady ??= import('./stack.js')
     .then(({ installModifierStack }) => installModifierStack({ editor: modifiers.editor, modifiers }))
+    .then(async (stack) => {
+      if (!stack) return null;
+      const { installModifierStackWorkspaceGuard } = await import('./stack-guard.js');
+      installModifierStackWorkspaceGuard(modifiers.editor);
+      return stack;
+    })
     .catch((error) => {
       console.error('[gluestack] Modifier Stack failed to load', error);
       modifiers.onStatus(`Modifier Stack недоступен: ${error.message || error}`);
