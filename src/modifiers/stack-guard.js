@@ -1,4 +1,18 @@
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
+
 const STACK_KEY = 'gluestackModifierStack';
+
+function downloadGlb(data, filename) {
+  const blob = new Blob([data], { type: 'model/gltf-binary' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 export function installModifierStackWorkspaceGuard(editor) {
   if (!editor || editor.__modifierStackWorkspaceGuard) return editor?.__modifierStackWorkspaceGuard ?? null;
@@ -38,18 +52,23 @@ export function installModifierStackWorkspaceGuard(editor) {
 
   const originalExportGlb = editor.exportGlb?.bind(editor);
   if (originalExportGlb) {
-    editor.exportGlb = async (...args) => {
-      const metadata = [];
-      editor.modelRoot.traverse((object) => {
-        if (!object.userData || !Object.prototype.hasOwnProperty.call(object.userData, STACK_KEY)) return;
-        metadata.push([object, structuredClone(object.userData[STACK_KEY])]);
-        delete object.userData[STACK_KEY];
+    editor.exportGlb = async (filename = 'model.glb') => {
+      if (editor.modelRoot.children.length === 0) throw new Error('Сцена пуста');
+      editor.events.onStatus('Экспорт GLB…');
+      const root = cloneSkeleton(editor.modelRoot);
+      root.traverse((object) => {
+        if (object.userData) delete object.userData[STACK_KEY];
       });
-      try {
-        return await originalExportGlb(...args);
-      } finally {
-        for (const [object, stack] of metadata) object.userData[STACK_KEY] = stack;
-      }
+      const data = await new Promise((resolve, reject) => {
+        editor.exporter.parse(
+          root,
+          resolve,
+          reject,
+          { binary: true, onlyVisible: false, trs: false, maxTextureSize: 4096 },
+        );
+      });
+      downloadGlb(data, filename);
+      editor.events.onStatus(`${filename} экспортирован · modifier stack metadata исключены`);
     };
   }
 
