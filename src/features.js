@@ -1,41 +1,98 @@
-import { installUVWorkspace } from './uv/integration.js';
-import { installMaterialPanel } from './materials/integration.js';
-import { installProjects } from './projects/integration.js';
-import { installGameReady } from './game-ready/integration.js';
-import { installTexturePaint } from './paint/integration.js';
-import { installProceduralGenerators } from './procedural/integration.js';
-import { installSceneControls } from './scene/integration.js';
-import { installRuntimeHardening } from './runtime/hardening.js';
-import { installDiagnostics } from './runtime/diagnostics.js';
-import { installResourceOwnership } from './runtime/resource-ownership.js';
-import { installImportPipeline } from './runtime/importer.js';
-import { installDataIntegrity } from './runtime/data-integrity.js';
-import { installViewportHistory } from './runtime/viewport-history.js';
-import { installAnimations } from './runtime/animations.js';
-
-function safeInstall(editor, name, factory) {
+async function loadAndInstall(editor, name, loader, installer) {
   try {
-    return factory();
+    const module = await loader();
+    return installer(module);
   } catch (error) {
-    console.error(`[gluestack] ${name} failed to install`, error);
+    console.error(`[gluestack] ${name} failed to load/install`, error);
     editor.events.onStatus(`${name}: модуль не загрузился — см. консоль`);
     return null;
   }
 }
 
-export function installFeatures({ editor, editMode, knifeTool, requestNumber }) {
-  const resources = safeInstall(editor, 'Resource ownership', () => installResourceOwnership(editor));
-  const animations = safeInstall(editor, 'Animations', () => installAnimations(editor));
-  const importer = safeInstall(editor, 'GLTF importer', () => installImportPipeline({ editor, editMode, knifeTool }));
-  const uv = safeInstall(editor, 'UV Editing', () => installUVWorkspace({ editor, editMode, knifeTool, requestNumber }));
-  const materials = safeInstall(editor, 'Materials', () => installMaterialPanel({ editor }));
-  const projects = safeInstall(editor, 'Projects', () => installProjects({ editor, editMode, knifeTool }));
-  const gameReady = safeInstall(editor, 'Game Ready', () => installGameReady({ editor }));
-  const integrity = safeInstall(editor, 'Data integrity', () => installDataIntegrity({ editor, editMode, gameReady }));
-  const paint = safeInstall(editor, 'Texture Paint', () => installTexturePaint({ editor, editMode, knifeTool, materials }));
-  const procedural = safeInstall(editor, 'Procedural', () => installProceduralGenerators({ editor }));
-  const scene = safeInstall(editor, 'Scene controls', () => installSceneControls({ editor }));
-  const viewportHistory = safeInstall(editor, 'Viewport history', () => installViewportHistory(editor));
+export async function installFeatures({ editor, editMode, knifeTool, requestNumber }) {
+  const resources = await loadAndInstall(
+    editor,
+    'Resource ownership',
+    () => import('./runtime/resource-ownership.js'),
+    ({ installResourceOwnership }) => installResourceOwnership(editor),
+  );
+
+  const animations = await loadAndInstall(
+    editor,
+    'Animations',
+    () => import('./runtime/animations.js'),
+    ({ installAnimations }) => installAnimations(editor),
+  );
+
+  const importer = await loadAndInstall(
+    editor,
+    'GLTF importer',
+    () => import('./runtime/importer.js'),
+    ({ installImportPipeline }) => installImportPipeline({ editor, editMode, knifeTool }),
+  );
+
+  const uv = await loadAndInstall(
+    editor,
+    'UV Editing',
+    () => import('./uv/integration.js'),
+    ({ installUVWorkspace }) => installUVWorkspace({ editor, editMode, knifeTool, requestNumber }),
+  );
+
+  const materials = await loadAndInstall(
+    editor,
+    'Materials',
+    () => import('./materials/integration.js'),
+    ({ installMaterialPanel }) => installMaterialPanel({ editor }),
+  );
+
+  const projects = await loadAndInstall(
+    editor,
+    'Projects',
+    () => import('./projects/integration.js'),
+    ({ installProjects }) => installProjects({ editor, editMode, knifeTool }),
+  );
+
+  const gameReady = await loadAndInstall(
+    editor,
+    'Game Ready',
+    () => import('./game-ready/integration.js'),
+    ({ installGameReady }) => installGameReady({ editor }),
+  );
+
+  const integrity = await loadAndInstall(
+    editor,
+    'Data integrity',
+    () => import('./runtime/data-integrity.js'),
+    ({ installDataIntegrity }) => installDataIntegrity({ editor, editMode, gameReady }),
+  );
+
+  const paint = await loadAndInstall(
+    editor,
+    'Texture Paint',
+    () => import('./paint/integration.js'),
+    ({ installTexturePaint }) => installTexturePaint({ editor, editMode, knifeTool, materials }),
+  );
+
+  const procedural = await loadAndInstall(
+    editor,
+    'Procedural',
+    () => import('./procedural/integration.js'),
+    ({ installProceduralGenerators }) => installProceduralGenerators({ editor }),
+  );
+
+  const scene = await loadAndInstall(
+    editor,
+    'Scene controls',
+    () => import('./scene/integration.js'),
+    ({ installSceneControls }) => installSceneControls({ editor }),
+  );
+
+  const viewportHistory = await loadAndInstall(
+    editor,
+    'Viewport history',
+    () => import('./runtime/viewport-history.js'),
+    ({ installViewportHistory }) => installViewportHistory(editor),
+  );
 
   const previousSelectionHandler = editor.events.onSelection;
   editor.events.onSelection = (...args) => {
@@ -49,9 +106,36 @@ export function installFeatures({ editor, editMode, knifeTool, requestNumber }) 
     document.querySelectorAll('.workspace-tab').forEach((item) => item.classList.toggle('active', item === tab));
   });
 
-  const hardening = safeInstall(editor, 'Runtime hardening', () => installRuntimeHardening({ editor, projects, editMode }));
-  const installed = { uv, materials, projects, gameReady, paint, procedural, scene, hardening, resources, importer, integrity, viewportHistory, animations };
-  const diagnostics = safeInstall(editor, 'Diagnostics', () => installDiagnostics({ editor, projects, features: installed }));
+  const hardening = await loadAndInstall(
+    editor,
+    'Runtime hardening',
+    () => import('./runtime/hardening.js'),
+    ({ installRuntimeHardening }) => installRuntimeHardening({ editor, projects, editMode }),
+  );
+
+  const installed = {
+    uv,
+    materials,
+    projects,
+    gameReady,
+    paint,
+    procedural,
+    scene,
+    hardening,
+    resources,
+    importer,
+    integrity,
+    viewportHistory,
+    animations,
+  };
+
+  const diagnostics = await loadAndInstall(
+    editor,
+    'Diagnostics',
+    () => import('./runtime/diagnostics.js'),
+    ({ installDiagnostics }) => installDiagnostics({ editor, projects, features: installed }),
+  );
+
   const result = { ...installed, diagnostics };
   const failed = Object.entries(result).filter(([, value]) => !value).map(([name]) => name);
   if (failed.length) editor.events.onStatus(`Базовый редактор готов · не загрузились: ${failed.join(', ')}`);
