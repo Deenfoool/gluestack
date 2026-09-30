@@ -5,6 +5,7 @@ import { installGameReady } from './game-ready/integration.js';
 import { installTexturePaint } from './paint/integration.js';
 import { installProceduralGenerators } from './procedural/integration.js';
 import { installSceneControls } from './scene/integration.js';
+import { installRuntimeHardening } from './runtime/hardening.js';
 
 export function installFeatures({ editor, editMode, knifeTool, requestNumber }) {
   const uv = installUVWorkspace({ editor, editMode, knifeTool, requestNumber });
@@ -27,5 +28,6 @@ export function installFeatures({ editor, editMode, knifeTool, requestNumber }) 
     document.querySelectorAll('.workspace-tab').forEach((item) => item.classList.toggle('active', item === tab));
   });
 
-  return { uv, materials, projects, gameReady, paint, procedural, scene };
+  const hardening = installRuntimeHardening({ editor, projects });
+  return { uv, materials, projects, gameReady, paint, procedural, scene, hardening };
 }
