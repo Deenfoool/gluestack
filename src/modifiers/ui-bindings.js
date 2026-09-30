@@ -7,14 +7,21 @@ function inputNumber(root, selector, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
 
-function stackAdd(modifiers, type, params, fallback) {
-  if (modifiers.stack?.add) return modifiers.stack.add(type, params);
+async function stackAdd(modifiers, type, params, fallback) {
+  let stack = modifiers.stack;
+  if (!stack && modifiers.stackReady) {
+    try { stack = await modifiers.stackReady; } catch {}
+  }
+  if (stack?.add) return stack.add(type, params);
   return fallback();
 }
 
 let booleanModulePromise = null;
 
 async function runBoolean(modifiers, operation) {
+  if (modifiers.stackReady && !modifiers.stack) {
+    try { await modifiers.stackReady; } catch {}
+  }
   const selected = modifiers.editor.getTopLevelSelection?.() ?? [];
   if (modifiers.stack?.hasStack && selected.some((mesh) => modifiers.stack.hasStack(mesh))) {
     modifiers.onStatus('Boolean: сначала Apply Stack или Clear Stack на выбранных Mesh');
@@ -33,8 +40,16 @@ async function runBoolean(modifiers, operation) {
 }
 
 export function bindModifierControls(modifiers, root = document) {
+  modifiers.stackReady ??= import('./stack.js')
+    .then(({ installModifierStack }) => installModifierStack({ editor: modifiers.editor, modifiers }))
+    .catch((error) => {
+      console.error('[gluestack] Modifier Stack failed to load', error);
+      modifiers.onStatus(`Modifier Stack недоступен: ${error.message || error}`);
+      return null;
+    });
+
   root.querySelectorAll('[data-modifier-mirror]').forEach((button) => {
-    button.addEventListener('click', () => stackAdd(
+    button.addEventListener('click', async () => stackAdd(
       modifiers,
       'mirror',
       { axis: button.dataset.modifierMirror },
@@ -42,12 +57,12 @@ export function bindModifierControls(modifiers, root = document) {
     ));
   });
 
-  root.querySelector('[data-modifier-array]')?.addEventListener('click', () => {
+  root.querySelector('[data-modifier-array]')?.addEventListener('click', async () => {
     const count = inputNumber(root, '#modifier-array-count', 2);
     const x = inputNumber(root, '#modifier-array-x', 2);
     const y = inputNumber(root, '#modifier-array-y', 0);
     const z = inputNumber(root, '#modifier-array-z', 0);
-    stackAdd(
+    await stackAdd(
       modifiers,
       'array',
       { count, x, y, z },
@@ -55,29 +70,28 @@ export function bindModifierControls(modifiers, root = document) {
     );
   });
 
-  root.querySelector('[data-modifier-solidify]')?.addEventListener('click', () => {
+  root.querySelector('[data-modifier-solidify]')?.addEventListener('click', async () => {
     const thickness = inputNumber(root, '#modifier-solidify-thickness', 0.1);
-    stackAdd(modifiers, 'solidify', { thickness }, () => modifiers.applySolidify(thickness));
+    await stackAdd(modifiers, 'solidify', { thickness }, () => modifiers.applySolidify(thickness));
   });
 
-  root.querySelector('[data-modifier-subdivision]')?.addEventListener('click', () => {
+  root.querySelector('[data-modifier-subdivision]')?.addEventListener('click', async () => {
     const levels = inputNumber(root, '#modifier-subdivision-levels', 1);
-    stackAdd(modifiers, 'subdivision', { levels }, () => modifiers.applySubdivision(levels));
+    await stackAdd(modifiers, 'subdivision', { levels }, () => modifiers.applySubdivision(levels));
   });
 
-  root.querySelector('[data-modifier-bevel]')?.addEventListener('click', () => {
+  root.querySelector('[data-modifier-bevel]')?.addEventListener('click', async () => {
     const factor = inputNumber(root, '#modifier-bevel-factor', 0.08);
-    stackAdd(modifiers, 'bevel', { factor }, () => applyBevelModifier(modifiers, factor));
+    await stackAdd(modifiers, 'bevel', { factor }, () => applyBevelModifier(modifiers, factor));
   });
 
   root.querySelector('[data-modifier-decimate]')?.addEventListener('click', async () => {
     const ratio = inputNumber(root, '#modifier-decimate-ratio', 0.5);
-    if (modifiers.stack?.add) modifiers.stack.add('decimate', { ratio });
-    else await applyDecimate(modifiers, ratio);
+    await stackAdd(modifiers, 'decimate', { ratio }, () => applyDecimate(modifiers, ratio));
   });
 
-  root.querySelector('[data-modifier-triangulate]')?.addEventListener('click', () => {
-    stackAdd(modifiers, 'triangulate', {}, () => applyTriangulate(modifiers));
+  root.querySelector('[data-modifier-triangulate]')?.addEventListener('click', async () => {
+    await stackAdd(modifiers, 'triangulate', {}, () => applyTriangulate(modifiers));
   });
 
   root.querySelectorAll('[data-modifier-boolean]').forEach((button) => {
