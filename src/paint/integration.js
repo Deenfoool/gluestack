@@ -20,6 +20,40 @@ function canvasFromTexture(texture, size = 1024) {
   return canvas;
 }
 
+function copyTextureSettings(target, source) {
+  if (!source) {
+    target.colorSpace = THREE.SRGBColorSpace;
+    target.wrapS = THREE.RepeatWrapping;
+    target.wrapT = THREE.RepeatWrapping;
+    return target;
+  }
+  target.name = source.name;
+  target.mapping = source.mapping;
+  target.channel = source.channel;
+  target.wrapS = source.wrapS;
+  target.wrapT = source.wrapT;
+  target.magFilter = source.magFilter;
+  target.minFilter = source.minFilter;
+  target.anisotropy = source.anisotropy;
+  target.generateMipmaps = source.generateMipmaps;
+  target.premultiplyAlpha = source.premultiplyAlpha;
+  target.flipY = source.flipY;
+  target.unpackAlignment = source.unpackAlignment;
+  target.colorSpace = source.colorSpace || THREE.SRGBColorSpace;
+  target.offset.copy(source.offset);
+  target.repeat.copy(source.repeat);
+  target.center.copy(source.center);
+  target.rotation = source.rotation;
+  target.matrixAutoUpdate = source.matrixAutoUpdate;
+  target.userData = structuredClone(source.userData ?? {});
+  target.needsUpdate = true;
+  return target;
+}
+
+function paintTextureFromCanvas(canvas, source) {
+  return copyTextureSettings(new THREE.CanvasTexture(canvas), source);
+}
+
 export function installTexturePaint({ editor, editMode, knifeTool }) {
   const tabs = document.querySelector('.workspace-tabs');
   const viewport = document.querySelector('#viewport');
@@ -73,17 +107,10 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
       return false;
     }
     editor.checkpoint('Prepare texture paint');
-    paintCanvas = canvasFromTexture(material.map, 1024);
-    paintCtx = paintCanvas.getContext('2d', { willReadFrequently: true });
     const old = material.map;
-    texture = new THREE.CanvasTexture(paintCanvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.wrapS = old?.wrapS ?? THREE.RepeatWrapping;
-    texture.wrapT = old?.wrapT ?? THREE.RepeatWrapping;
-    texture.offset.copy(old?.offset ?? new THREE.Vector2());
-    texture.repeat.copy(old?.repeat ?? new THREE.Vector2(1, 1));
-    texture.center.copy(old?.center ?? new THREE.Vector2(0.5, 0.5));
-    texture.rotation = old?.rotation ?? 0;
+    paintCanvas = canvasFromTexture(old, 1024);
+    paintCtx = paintCanvas.getContext('2d', { willReadFrequently: true });
+    texture = paintTextureFromCanvas(paintCanvas, old);
     material.map = texture;
     material.needsUpdate = true;
     window.dispatchEvent(new CustomEvent('gluestack:texture-changed', { detail: { mesh, texture, key: 'map' } }));
@@ -93,7 +120,10 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
   function enter() {
     knifeTool.cancel(true);
     if (editMode.active) editMode.exit();
-    if (!prepare()) return false;
+    if (!prepare()) {
+      document.querySelector('[data-workspace="layout"]')?.click();
+      return false;
+    }
     active = true;
     panel.hidden = false;
     editor.transform.detach();
@@ -107,6 +137,7 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
     active = false;
     painting = false;
     panel.hidden = true;
+    editor.orbit.enabled = true;
     if (editor.selected) editor.transform.attach(editor.selected);
   }
 
@@ -139,10 +170,11 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
     const color = panel.querySelector('[data-paint="color"]').value;
     const gradient = paintCtx.createRadialGradient(x, y, 0, x, y, radius);
     gradient.addColorStop(0, color);
-    gradient.addColorStop(Math.max(0, 1 - strength), color);
+    gradient.addColorStop(0.72, color);
     gradient.addColorStop(1, `${color}00`);
     paintCtx.save();
     paintCtx.globalCompositeOperation = 'source-over';
+    paintCtx.globalAlpha = THREE.MathUtils.clamp(strength, 0.05, 1);
     paintCtx.fillStyle = gradient;
     paintCtx.beginPath();
     paintCtx.arc(x, y, radius, 0, Math.PI * 2);
@@ -180,7 +212,17 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
     paintCtx.fillStyle = '#ffffff';
     paintCtx.fillRect(0, 0, paintCanvas.width, paintCanvas.height);
     texture.needsUpdate = true;
+    window.dispatchEvent(new CustomEvent('gluestack:texture-changed', { detail: { mesh, texture, key: 'map' } }));
   });
+
+  const previousSelection = editor.events.onSelection;
+  editor.events.onSelection = (...args) => {
+    previousSelection(...args);
+    if (active && editor.selected !== mesh) {
+      leave();
+      editor.events.onStatus('Texture Paint завершён: выбран другой объект');
+    }
+  };
 
   refreshIcons();
   return { tab, panel, enter, leave, get active() { return active; } };
