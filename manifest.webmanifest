@@ -1,0 +1,27 @@
+{
+  "name": "gluestack — GLB Model Editor",
+  "short_name": "gluestack",
+  "description": "Браузерный Blender-подобный редактор для создания, редактирования и экспорта игровых GLB-моделей.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#303030",
+  "theme_color": "#303030",
+  "lang": "ru",
+  "categories": ["graphics", "design", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "assets/images/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/images/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
