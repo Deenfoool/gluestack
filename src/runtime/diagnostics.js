@@ -7,18 +7,13 @@ function result(name, ok, detail = '', level = ok ? 'pass' : 'fail') {
   return { name, ok, detail, level };
 }
 
-function countMeshes(root) {
-  let count = 0;
-  root?.traverse?.((object) => { if (object.isMesh) count += 1; });
-  return count;
-}
-
 function sceneSignature(root) {
   const textures = new Set();
   const signature = {
     meshes: 0,
     uvMeshes: 0,
     materialSlots: 0,
+    materialGroups: 0,
     pbrMaterials: 0,
     textureSlots: 0,
     extrasObjects: 0,
@@ -31,6 +26,7 @@ function sceneSignature(root) {
     const position = object.geometry?.getAttribute('position');
     const uv = object.geometry?.getAttribute('uv');
     if (position && uv && uv.count === position.count) signature.uvMeshes += 1;
+    signature.materialGroups += object.geometry?.groups?.length ?? 0;
 
     const materials = Array.isArray(object.material) ? object.material.filter(Boolean) : object.material ? [object.material] : [];
     signature.materialSlots += materials.length;
@@ -49,10 +45,20 @@ function sceneSignature(root) {
   return signature;
 }
 
+function animationSignature(clips = []) {
+  return {
+    clips: clips.length,
+    tracks: clips.reduce((sum, clip) => sum + (clip?.tracks?.length ?? 0), 0),
+    duration: clips.reduce((sum, clip) => sum + (Number.isFinite(clip?.duration) ? clip.duration : 0), 0),
+  };
+}
+
 function signatureDetail(before, after) {
   return [
     `mesh ${before.meshes}→${after.meshes}`,
     `UV ${before.uvMeshes}→${after.uvMeshes}`,
+    `slots ${before.materialSlots}→${after.materialSlots}`,
+    `groups ${before.materialGroups}→${after.materialGroups}`,
     `PBR ${before.pbrMaterials}→${after.pbrMaterials}`,
     `texture slots ${before.textureSlots}→${after.textureSlots}`,
     `extras ${before.extrasObjects}→${after.extrasObjects}`,
@@ -63,10 +69,17 @@ function signatureMatches(before, after) {
   return before.meshes === after.meshes
     && before.uvMeshes === after.uvMeshes
     && before.materialSlots === after.materialSlots
+    && before.materialGroups === after.materialGroups
     && before.pbrMaterials === after.pbrMaterials
     && before.textureSlots === after.textureSlots
     && before.uniqueTextures === after.uniqueTextures
     && before.extrasObjects === after.extrasObjects;
+}
+
+function animationsMatch(before, after) {
+  return before.clips === after.clips
+    && before.tracks === after.tracks
+    && Math.abs(before.duration - after.duration) < 1e-3;
 }
 
 async function exportBuffer(editor) {
@@ -117,7 +130,7 @@ export function installDiagnostics({ editor, projects, features = {} }) {
 
   const style = document.createElement('style');
   style.textContent = `
-    .diagnostics-overlay{position:fixed;z-index:1000;inset:0;background:rgba(0,0,0,.62);display:grid;place-items:center;padding:24px}.diagnostics-overlay[hidden]{display:none}.diagnostics-dialog{width:min(720px,96vw);max-height:min(760px,90vh);display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;background:#252525;border:1px solid #555;border-radius:6px;box-shadow:0 18px 55px rgba(0,0,0,.55);overflow:hidden}.diagnostics-dialog header,.diagnostics-dialog footer{display:flex;align-items:center;gap:8px;padding:9px 11px;background:#303030}.diagnostics-dialog header{border-bottom:1px solid #181818}.diagnostics-dialog header button{margin-left:auto}.diagnostics-dialog button{min-height:27px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid #4c4c4c;border-radius:3px;background:#383838;color:#ddd}.diagnostics-dialog button:hover{background:#4a4a4a}.diagnostics-summary{padding:9px 11px;color:#bbb;border-bottom:1px solid #3d3d3d}.diagnostics-results{overflow:auto;padding:8px 11px;display:grid;gap:5px}.diagnostics-row{display:grid;grid-template-columns:62px minmax(130px,.8fr) minmax(0,1.4fr);gap:8px;align-items:start;padding:6px 7px;background:#202020;border-radius:3px}.diagnostics-row .badge{font-weight:700}.diagnostics-row.pass .badge{color:#73bf76}.diagnostics-row.warn .badge{color:#d6a047}.diagnostics-row.fail .badge{color:#df6868}.diagnostics-row .detail{color:#a5a5a5;word-break:break-word}.diagnostics-dialog footer{border-top:1px solid #181818;justify-content:flex-end}`;
+    .diagnostics-overlay{position:fixed;z-index:1000;inset:0;background:rgba(0,0,0,.62);display:grid;place-items:center;padding:24px}.diagnostics-overlay[hidden]{display:none}.diagnostics-dialog{width:min(760px,96vw);max-height:min(780px,90vh);display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;background:#252525;border:1px solid #555;border-radius:6px;box-shadow:0 18px 55px rgba(0,0,0,.55);overflow:hidden}.diagnostics-dialog header,.diagnostics-dialog footer{display:flex;align-items:center;gap:8px;padding:9px 11px;background:#303030}.diagnostics-dialog header{border-bottom:1px solid #181818}.diagnostics-dialog header button{margin-left:auto}.diagnostics-dialog button{min-height:27px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid #4c4c4c;border-radius:3px;background:#383838;color:#ddd}.diagnostics-dialog button:hover{background:#4a4a4a}.diagnostics-summary{padding:9px 11px;color:#bbb;border-bottom:1px solid #3d3d3d}.diagnostics-results{overflow:auto;padding:8px 11px;display:grid;gap:5px}.diagnostics-row{display:grid;grid-template-columns:62px minmax(150px,.8fr) minmax(0,1.4fr);gap:8px;align-items:start;padding:6px 7px;background:#202020;border-radius:3px}.diagnostics-row .badge{font-weight:700}.diagnostics-row.pass .badge{color:#73bf76}.diagnostics-row.warn .badge{color:#d6a047}.diagnostics-row.fail .badge{color:#df6868}.diagnostics-row .detail{color:#a5a5a5;word-break:break-word}.diagnostics-dialog footer{border-top:1px solid #181818;justify-content:flex-end}`;
   document.head.appendChild(style);
 
   let lastResults = [];
@@ -135,7 +148,7 @@ export function installDiagnostics({ editor, projects, features = {} }) {
     checks.push(result('Renderer', Boolean(editor.renderer?.domElement?.isConnected), editor.renderer?.domElement?.isConnected ? 'WebGL canvas connected' : 'Renderer canvas missing'));
     checks.push(result('Scene root', Boolean(editor.modelRoot?.parent), `${editor.modelRoot?.children?.length ?? 0} top-level object(s)`));
 
-    const requiredFeatures = ['resources', 'importer', 'uv', 'materials', 'projects', 'gameReady', 'integrity', 'paint', 'procedural', 'scene', 'hardening'];
+    const requiredFeatures = ['resources', 'animations', 'importer', 'uv', 'materials', 'projects', 'gameReady', 'integrity', 'paint', 'procedural', 'scene', 'hardening', 'viewportHistory'];
     for (const key of requiredFeatures) {
       checks.push(result(`Feature: ${key}`, Boolean(features[key]), features[key] ? 'installed' : 'not installed'));
     }
@@ -144,22 +157,35 @@ export function installDiagnostics({ editor, projects, features = {} }) {
     if (selected?.isMesh) {
       const position = selected.geometry?.getAttribute('position');
       const uv = selected.geometry?.getAttribute('uv');
+      const materialSlots = Array.isArray(selected.material) ? selected.material.length : selected.material ? 1 : 0;
       checks.push(result('Selected mesh geometry', Boolean(position?.count >= 3), `${position?.count ?? 0} position vertices`));
       checks.push(result('Selected mesh UV', Boolean(uv && uv.count === position?.count), uv ? `${uv.count} UV corners/vertices` : 'No UV attribute', uv ? 'pass' : 'warn'));
+      checks.push(result('Selected material groups', true, `${materialSlots} slot(s) · ${selected.geometry?.groups?.length ?? 0} group(s)`, materialSlots > 1 ? 'pass' : 'warn'));
     } else {
       checks.push(result('Selected mesh', true, 'No Mesh selected — mesh-specific checks skipped', 'warn'));
     }
 
     try {
       const before = sceneSignature(editor.modelRoot);
+      const beforeAnimations = animationSignature(editor.animations ?? []);
       const buffer = await exportBuffer(editor);
       const gltf = await parseBuffer(editor, buffer);
       const after = sceneSignature(gltf.scene);
+      const afterAnimations = animationSignature(gltf.animations ?? []);
+      const dataMatch = signatureMatches(before, after);
+      const animationMatch = animationsMatch(beforeAnimations, afterAnimations);
       checks.push(result('GLB export → parse', after.meshes === before.meshes, `${buffer.byteLength.toLocaleString()} bytes · meshes ${before.meshes} → ${after.meshes}`, after.meshes === before.meshes ? 'pass' : 'fail'));
-      checks.push(result('GLB data round-trip', signatureMatches(before, after), signatureDetail(before, after), signatureMatches(before, after) ? 'pass' : 'fail'));
+      checks.push(result('GLB data round-trip', dataMatch, signatureDetail(before, after), dataMatch ? 'pass' : 'fail'));
+      checks.push(result(
+        'GLB animation round-trip',
+        animationMatch,
+        `clips ${beforeAnimations.clips}→${afterAnimations.clips} · tracks ${beforeAnimations.tracks}→${afterAnimations.tracks} · duration ${beforeAnimations.duration.toFixed(2)}→${afterAnimations.duration.toFixed(2)}s`,
+        animationMatch ? 'pass' : 'fail',
+      ));
     } catch (error) {
       checks.push(result('GLB export → parse', false, error.message || String(error)));
       checks.push(result('GLB data round-trip', false, 'Export/parse did not complete'));
+      checks.push(result('GLB animation round-trip', false, 'Export/parse did not complete'));
     }
 
     if (projects) {
@@ -185,9 +211,16 @@ export function installDiagnostics({ editor, projects, features = {} }) {
         );
         checks.push(result('.gluestack encode/decode', baseValid, `v${metadata.version ?? '?'} · ${buffer.byteLength.toLocaleString()} bytes`));
         checks.push(result('.gluestack editor metadata', metadataValid, metadataValid ? 'camera · selection · editor · viewport present' : 'missing editor metadata'));
+
+        const parsed = await parseBuffer(editor, decoded.glb);
+        const beforeAnimations = animationSignature(editor.animations ?? []);
+        const afterAnimations = animationSignature(parsed.animations ?? []);
+        const projectAnimations = animationsMatch(beforeAnimations, afterAnimations);
+        checks.push(result('.gluestack animation payload', projectAnimations, `clips ${beforeAnimations.clips}→${afterAnimations.clips} · tracks ${beforeAnimations.tracks}→${afterAnimations.tracks}`));
       } catch (error) {
         checks.push(result('.gluestack encode/decode', false, error.message || String(error)));
         checks.push(result('.gluestack editor metadata', false, 'encode/decode did not complete'));
+        checks.push(result('.gluestack animation payload', false, 'encode/decode did not complete'));
       }
     }
 
