@@ -1,10 +1,11 @@
 import { Editor3D } from './editor.js';
 import { EditModeController } from './edit/controller.js';
+import { KnifeTool } from './edit/knife-tool.js';
 import { TransformModal } from './transform-modal.js';
 import { bindKeyboard } from './keyboard.js';
 import { bevelFace } from './edit/bevel.js';
 import { dissolveSelected } from './edit/dissolve.js';
-import { knifeCenter, loopCut } from './edit/cuts.js';
+import { loopCut } from './edit/cuts.js';
 import {
   refreshIcons,
   renderHistory,
@@ -37,6 +38,7 @@ const elements = {
 
 let editor;
 let editMode;
+let knifeTool;
 let refreshQueued = false;
 let transformRefreshQueued = false;
 
@@ -78,10 +80,12 @@ editMode = new EditModeController(editor, {
   onChange: scheduleRefresh,
   onStatus: setStatus,
 });
+knifeTool = new KnifeTool(editor, editMode, setStatus);
 
 const objectPointerHandler = editor.handlePointerUp.bind(editor);
 editor.handlePointerUp = (event) => {
-  if (editMode.active) editMode.handlePointerUp(event);
+  if (knifeTool.active) knifeTool.handlePointerUp(event);
+  else if (editMode.active) editMode.handlePointerUp(event);
   else objectPointerHandler(event);
 };
 
@@ -119,6 +123,7 @@ async function importSelectedFile() {
   const [file] = elements.fileInput.files;
   if (!file) return;
   try {
+    knifeTool.cancel(true);
     if (editMode.active) editMode.exit();
     await editor.importFile(file);
   } catch (error) {
@@ -146,7 +151,7 @@ function runEditAction(action) {
     case 'edit-dissolve': dissolveSelected(editMode); return true;
     case 'edit-merge': editMode.mergeSelected(); return true;
     case 'edit-fill': editMode.fillSelected(); return true;
-    case 'edit-knife': knifeCenter(editMode); return true;
+    case 'edit-knife': knifeTool.begin(); return true;
     case 'edit-recalculate-normals': editMode.recalculateNormals(); return true;
     case 'edit-flip-normals': editMode.flipNormals(); return true;
     case 'edit-extrude': {
@@ -178,7 +183,11 @@ function runEditAction(action) {
 function runAction(action) {
   closeMenus();
   if (transformModal.state) transformModal.cancel(true);
-  if (action === 'toggle-mode') { editMode.toggle(); return; }
+  if (action !== 'edit-knife') knifeTool.cancel(true);
+  if (action === 'toggle-mode') {
+    editMode.toggle();
+    return;
+  }
   if (editMode.active && runEditAction(action)) return;
 
   if (editMode.active && (action === 'undo' || action === 'redo')) editMode.exit();
@@ -206,6 +215,7 @@ $$('[data-history]').forEach((button) => button.addEventListener('click', () => 
 $$('[data-primitive]').forEach((button) => {
   button.addEventListener('click', () => {
     if (transformModal.state) transformModal.cancel(true);
+    knifeTool.cancel(true);
     if (editMode.active) editMode.exit();
     editor.addPrimitive(button.dataset.primitive);
     closeMenus();
@@ -214,11 +224,15 @@ $$('[data-primitive]').forEach((button) => {
 $$('[data-transform-mode]').forEach((button) => {
   button.addEventListener('click', () => {
     if (transformModal.state) transformModal.cancel(true);
+    knifeTool.cancel(true);
     setTransformMode(button.dataset.transformMode);
   });
 });
 $$('[data-edit-select-mode]').forEach((button) => {
-  button.addEventListener('click', () => editMode.setSelectionMode(button.dataset.editSelectMode));
+  button.addEventListener('click', () => {
+    knifeTool.cancel(true);
+    editMode.setSelectionMode(button.dataset.editSelectMode);
+  });
 });
 
 const snapButton = $('[data-snap]');
@@ -230,6 +244,7 @@ snapButton.addEventListener('click', () => {
 
 $$('.workspace-tab:not(:disabled)').forEach((button) => {
   button.addEventListener('click', () => {
+    knifeTool.cancel(true);
     $$('.workspace-tab').forEach((tab) => tab.classList.remove('active'));
     button.classList.add('active');
     if (button.dataset.workspace === 'modeling' && !editMode.active && editor.selected?.isMesh) editMode.enter();
@@ -255,6 +270,7 @@ $$('[data-transform]').forEach((input) => {
 bindKeyboard({
   editor,
   editMode,
+  knifeTool,
   transformModal,
   snapButton,
   requestNumber,
@@ -263,4 +279,4 @@ bindKeyboard({
 
 scheduleRefresh();
 refreshIcons();
-setStatus('Готово · Tab Edit Mode · Ctrl+B Bevel · Ctrl+R Loop Cut · Ctrl+X Dissolve · K Knife Center');
+setStatus('Готово · Tab Edit Mode · Ctrl+B Bevel · Ctrl+R Loop Cut · Ctrl+X Dissolve · K Knife');
