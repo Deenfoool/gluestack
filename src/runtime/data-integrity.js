@@ -15,9 +15,20 @@ function materialUsesTextures(mesh) {
   return materials.some((material) => TEXTURE_SLOTS.some((slot) => material?.[slot]?.isTexture));
 }
 
-export function installDataIntegrity({ editor, gameReady }) {
+export function installDataIntegrity({ editor, editMode, gameReady }) {
   if (!editor || editor.__gluestackIntegrityGuards) return null;
   editor.__gluestackIntegrityGuards = true;
+
+  if (editMode?.enter) {
+    const originalEnter = editMode.enter.bind(editMode);
+    editMode.enter = (mesh = editor.selected) => {
+      if (morphData(mesh)) {
+        editor.events.onStatus('Edit Mode отменён: morph targets пока не поддерживаются без потери данных');
+        return false;
+      }
+      return originalEnter(mesh);
+    };
+  }
 
   const originalJoin = editor.joinSelected.bind(editor);
   editor.joinSelected = () => {
@@ -54,5 +65,9 @@ export function installDataIntegrity({ editor, gameReady }) {
     };
   }
 
-  return { joinGuarded: true, lodGuarded: Boolean(controller?.generateLOD) };
+  return {
+    editGuarded: Boolean(editMode?.enter),
+    joinGuarded: true,
+    lodGuarded: Boolean(controller?.generateLOD),
+  };
 }
