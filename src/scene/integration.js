@@ -104,7 +104,9 @@ export function installSceneControls({ editor }) {
     const light = new THREE.DirectionalLight(0xffffff, 2.5);
     light.name = editor.uniqueName('Sun');
     light.position.copy(editor.camera.position);
-    light.target.position.copy(editor.orbit.target);
+    light.quaternion.copy(editor.camera.quaternion);
+    light.target.position.set(0, 0, -1);
+    light.add(light.target);
     addObject(light, 'Directional Light');
   });
   menu.querySelector('[data-scene-action="camera"]').addEventListener('click', () => {
