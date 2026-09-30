@@ -40,12 +40,6 @@ function uniqueMissing(map, uris) {
   return [...new Set(uris.filter((uri) => !resolveFile(map, uri)))];
 }
 
-function assertStaticGltf(gltf) {
-  if (gltf?.animations?.length) {
-    throw new Error(`Анимированный glTF пока не импортируется: найдено animation clips ${gltf.animations.length}. Это блокируется, чтобы экспорт не потерял анимацию.`);
-  }
-}
-
 function isolateEditableResources(root) {
   root?.traverse?.((object) => {
     if (!object.isMesh || object.isSkinnedMesh) return;
@@ -59,15 +53,18 @@ function isolateEditableResources(root) {
   return root;
 }
 
-function addImportedScene(editor, imported, label) {
+function addImportedScene(editor, gltf, label) {
   editor.checkpoint('Import');
-  isolateEditableResources(imported);
+  isolateEditableResources(gltf.scene);
+  const imported = gltf.scene;
   imported.name = imported.name || label;
   editor.assignIds(imported, true);
   editor.modelRoot.add(imported);
+  editor.registerAnimations?.(gltf.animations ?? [], { replace: false });
   editor.select(imported);
   editor.events.onStructure();
-  editor.events.onStatus(`${label} импортирован`);
+  const clips = gltf.animations?.length ?? 0;
+  editor.events.onStatus(`${label} импортирован${clips ? ` · animations ${clips}` : ''}`);
   return imported;
 }
 
@@ -94,8 +91,7 @@ async function parseWithResolver(editor, payload, fileMap, label) {
 
   try {
     const gltf = await parseGltf(editor, payload);
-    assertStaticGltf(gltf);
-    return addImportedScene(editor, gltf.scene, label);
+    return addImportedScene(editor, gltf, label);
   } finally {
     manager.setURLModifier(undefined);
     for (const url of urls.values()) URL.revokeObjectURL(url);
@@ -131,8 +127,7 @@ export function installImportPipeline({ editor, editMode, knifeTool }) {
       if (/\.glb$/i.test(primary.name)) {
         const payload = await primary.arrayBuffer();
         const gltf = await parseGltf(editor, payload);
-        assertStaticGltf(gltf);
-        addImportedScene(editor, gltf.scene, primary.name.replace(/\.glb$/i, ''));
+        addImportedScene(editor, gltf, primary.name.replace(/\.glb$/i, ''));
         return;
       }
 
