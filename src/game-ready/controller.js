@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SimplifyModifier } from 'three/addons/modifiers/SimplifyModifier.js';
-import { disposeGeometryIfUnreferenced } from '../runtime/resource-ownership.js';
+import {
+  disposeGeometryIfUnreferenced,
+  disposeMaterialIfUnreferenced,
+} from '../runtime/resource-ownership.js';
 
 const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap'];
 const SIMPLIFY_SAFE_ATTRIBUTES = new Set(['position', 'uv', 'normal', 'tangent', 'color']);
@@ -102,6 +105,9 @@ export class GameReadyController {
       if ([object.scale.x, object.scale.y, object.scale.z].some((value) => Math.abs(value - 1) > 1e-5)) {
         result.issues.push({ level: 'warning', object: object.name, message: `Scale not applied (${object.scale.x.toFixed(2)}, ${object.scale.y.toFixed(2)}, ${object.scale.z.toFixed(2)})` });
       }
+      if (object.isInstancedMesh) {
+        result.issues.push({ level: 'warning', object: object.name, message: 'InstancedMesh: destructive Edit/Modifiers/LOD disabled until instance-aware pipeline' });
+      }
       if (hasMorphTargets(object)) {
         result.issues.push({ level: 'warning', object: object.name, message: 'Morph targets: автоматический LOD отключён, чтобы не потерять morph data' });
       }
@@ -199,7 +205,7 @@ export class GameReadyController {
         } else canonical.set(key, object.material);
       }
     });
-    replacedMaterials.forEach((material) => material?.dispose?.());
+    replacedMaterials.forEach((material) => disposeMaterialIfUnreferenced(this.editor, material));
 
     this.editor.refreshSelectionVisuals();
     this.editor.events.onStructure();
@@ -210,8 +216,8 @@ export class GameReadyController {
 
   generateLOD(ratios = [0.5, 0.25]) {
     const source = this.editor.selected;
-    if (!source?.isMesh || source.isSkinnedMesh || !source.geometry?.getAttribute('position')) {
-      this.status('LOD: выберите обычный Mesh');
+    if (!source?.isMesh || source.isSkinnedMesh || source.isInstancedMesh || !source.geometry?.getAttribute('position')) {
+      this.status(source?.isInstancedMesh ? 'LOD: InstancedMesh требует отдельного instance-aware pipeline' : 'LOD: выберите обычный Mesh');
       return false;
     }
     if (Array.isArray(source.material) && source.material.length > 1) {
