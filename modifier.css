@@ -17,12 +17,14 @@
 }
 .modifier-title svg { color: var(--accent); }
 
-.modifier-axis-row {
+.modifier-axis-row,
+.modifier-boolean-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
 }
 .modifier-axis-row button,
+.modifier-boolean-grid button,
 .modifier-apply {
   min-height: 25px;
   border: 1px solid #4a4a4a;
@@ -31,6 +33,7 @@
   color: #e6e6e6;
 }
 .modifier-axis-row button:hover,
+.modifier-boolean-grid button:hover,
 .modifier-apply:hover { background: #494949; border-color: #5c5c5c; }
 
 .modifier-field {
@@ -82,4 +85,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
+  margin-top: 5px;
 }
+.modifier-secondary { background: #2f2f2f; }
+.modifier-boolean-grid button:nth-child(2) { color: #f2c27b; }
