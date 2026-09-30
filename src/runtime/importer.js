@@ -40,8 +40,22 @@ function uniqueMissing(map, uris) {
   return [...new Set(uris.filter((uri) => !resolveFile(map, uri)))];
 }
 
+function isolateEditableResources(root) {
+  root?.traverse?.((object) => {
+    if (!object.isMesh || object.isSkinnedMesh) return;
+    if (object.geometry?.clone) object.geometry = object.geometry.clone();
+    if (Array.isArray(object.material)) {
+      object.material = object.material.map((material) => material?.clone?.() ?? material);
+    } else if (object.material?.clone) {
+      object.material = object.material.clone();
+    }
+  });
+  return root;
+}
+
 function addImportedScene(editor, imported, label) {
   editor.checkpoint('Import');
+  isolateEditableResources(imported);
   imported.name = imported.name || label;
   editor.assignIds(imported, true);
   editor.modelRoot.add(imported);
