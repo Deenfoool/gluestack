@@ -31,13 +31,15 @@
 - [x] Сохранение UV и дополнительных BufferAttributes при topology-editing; новые corner-значения интерполируются. Skinned Mesh не редактируется, tangents после изменения топологии не переиспользуются.
 
 ## Этап 3 — Modifiers
-- [ ] Mirror.
-- [ ] Array.
-- [ ] Bevel.
-- [ ] Solidify.
-- [ ] Subdivision.
-- [ ] Decimate / Triangulate.
-- [ ] Boolean Union / Difference / Intersect.
+- [x] Mirror X / Y / Z.
+- [x] Array с Count и XYZ Offset.
+- [x] Bevel Modifier: базовый manifold chamfer без Segments/Profile.
+- [x] Solidify.
+- [x] Loop-style Subdivision, 1–3 уровня.
+- [x] Decimate через Three.js SimplifyModifier + Triangulate / Normalize.
+- [x] Boolean Union / Difference / Intersect для watertight/two-manifold Mesh через three-bvh-csg. Cutter сохраняется.
+
+Модификаторы на текущем этапе применяются destructive-операцией с общей Undo/Redo историей. Неразрушающий стек будет логично добавлять вместе с полноценным форматом проекта, чтобы параметры стека корректно сохранялись между сессиями.
 
 ## Этап 4 — UV Editing
 - [ ] Отдельный workspace UV Editing.
