@@ -117,6 +117,8 @@ export class ProjectController {
       this.editor.disposeObjectResources(child);
     }
     for (const child of [...gltf.scene.children]) this.editor.modelRoot.add(child);
+    if (this.editor.registerAnimations) this.editor.registerAnimations(gltf.animations ?? [], { replace: true });
+    else this.editor.animations = [...(gltf.animations ?? [])];
     this.editor.assignIds(this.editor.modelRoot);
 
     const byId = new Map();
@@ -142,7 +144,8 @@ export class ProjectController {
     this.name = metadata.name || 'Untitled';
     this.editor.events.onStructure();
     this.editor.events.onTransform(this.editor.selected);
-    this.status(`Проект «${this.name}» открыт`);
+    const clips = this.editor.animations?.length ?? 0;
+    this.status(`Проект «${this.name}» открыт${clips ? ` · animations ${clips}` : ''}`);
   }
 
   async openProjectBuffer(buffer) {
