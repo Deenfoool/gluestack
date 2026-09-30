@@ -38,6 +38,16 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     ({ installImportPipeline }) => installImportPipeline({ editor, editMode, knifeTool }),
   );
 
+  let modifierStack = editor.modifierStack ?? null;
+  if (!modifierStack && editor.modifierStackReady) {
+    try {
+      modifierStack = await editor.modifierStackReady;
+    } catch (error) {
+      console.error('[gluestack] Modifier Stack bootstrap failed', error);
+      editor.events.onStatus(`Modifier Stack: модуль не загрузился — ${error.message || error}`);
+    }
+  }
+
   const uv = await loadAndInstall(
     editor,
     'UV Editing',
@@ -105,6 +115,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
   editor.events.onSelection = (...args) => {
     previousSelectionHandler(...args);
     if (materials && !materials.panel.hidden) materials.refresh();
+    modifierStack?.render?.();
   };
 
   document.querySelector('.workspace-tabs')?.addEventListener('click', (event) => {
@@ -135,6 +146,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     viewportHistory,
     animations,
     animationEditor,
+    modifierStack,
   };
 
   const diagnostics = await loadAndInstall(
