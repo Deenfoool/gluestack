@@ -1,5 +1,12 @@
 import * as THREE from 'three';
 import {
+  attributesForTriangle,
+  averageTuples,
+  cornerAttributesForVertex,
+  faceAttributeMaps,
+  interpolateTuple,
+} from './attributes.js';
+import {
   EPSILON,
   boundaryEdgesForTriangles,
   cloneTriangle,
@@ -74,19 +81,28 @@ export function extrude(controller, distance = 0.25) {
     .filter((_, index) => !selectedTriangles.has(index))
     .map(cloneTriangle);
   for (const triangleIndex of selectedTriangles) {
-    const triangle = controller.triangles[triangleIndex];
-    triangles.push({
-      v: triangle.v.map((id) => duplicate.get(id)),
-      uv: triangle.uv.map((item) => item.clone()),
-      materialIndex: triangle.materialIndex,
-    });
+    const top = cloneTriangle(controller.triangles[triangleIndex]);
+    top.v = top.v.map((id) => duplicate.get(id));
+    triangles.push(top);
   }
   for (const edge of boundary) {
     const na = duplicate.get(edge.a);
     const nb = duplicate.get(edge.b);
-    const materialIndex = controller.triangles[edge.triangleIndex]?.materialIndex ?? 0;
-    triangles.push(makeTriangle([edge.a, edge.b, nb], materialIndex, [[0, 0], [1, 0], [1, 1]]));
-    triangles.push(makeTriangle([edge.a, nb, na], materialIndex, [[0, 0], [1, 1], [0, 1]]));
+    const source = controller.triangles[edge.triangleIndex];
+    const materialIndex = source?.materialIndex ?? 0;
+    const aAttrs = cornerAttributesForVertex(source, edge.a);
+    const bAttrs = cornerAttributesForVertex(source, edge.b);
+    const attrNames = new Set([...Object.keys(aAttrs), ...Object.keys(bAttrs)]);
+    const attrs1 = {};
+    const attrs2 = {};
+    for (const name of attrNames) {
+      const a = aAttrs[name] ?? [];
+      const b = bAttrs[name] ?? [];
+      attrs1[name] = [[...a], [...b], [...b]];
+      attrs2[name] = [[...a], [...b], [...a]];
+    }
+    triangles.push(makeTriangle([edge.a, edge.b, nb], materialIndex, [[0, 0], [1, 0], [1, 1]], attrs1));
+    triangles.push(makeTriangle([edge.a, nb, na], materialIndex, [[0, 0], [1, 1], [0, 1]], attrs2));
   }
 
   controller.vertices = vertices;
@@ -119,9 +135,16 @@ export function inset(controller, factor = 0.2) {
   loop.forEach((id) => center.add(controller.vertices[id].position));
   center.multiplyScalar(1 / loop.length);
   const vertices = controller.vertices.map((vertex) => ({ position: vertex.position.clone(), sources: [] }));
+  const attrMaps = faceAttributeMaps(group, controller.triangles);
+  const centerAttrs = Object.fromEntries(Object.entries(attrMaps).map(([name, map]) => (
+    [name, averageTuples(loop.map((id) => map.get(id) ?? []))]
+  )));
   const inner = loop.map((id) => {
     const nextId = vertices.length;
     vertices.push({ position: controller.vertices[id].position.clone().lerp(center, factor), sources: [] });
+    for (const [name, map] of Object.entries(attrMaps)) {
+      map.set(nextId, interpolateTuple(map.get(id), centerAttrs[name], factor));
+    }
     return nextId;
   });
 
@@ -129,11 +152,23 @@ export function inset(controller, factor = 0.2) {
   const triangles = controller.triangles.filter((_, index) => !remove.has(index)).map(cloneTriangle);
   const materialIndex = controller.triangles[group.triangles[0]]?.materialIndex ?? 0;
   controller.vertices = vertices;
-  triangles.push(...triangulateLoop(inner, group.normal, materialIndex, vertices));
+  triangles.push(...triangulateLoop(inner, group.normal, materialIndex, vertices, null, attrMaps));
   for (let i = 0; i < loop.length; i += 1) {
     const next = (i + 1) % loop.length;
-    triangles.push(makeTriangle([loop[i], loop[next], inner[next]], materialIndex, [[0, 0], [1, 0], [1, 1]]));
-    triangles.push(makeTriangle([loop[i], inner[next], inner[i]], materialIndex, [[0, 0], [1, 1], [0, 1]]));
+    const idsA = [loop[i], loop[next], inner[next]];
+    const idsB = [loop[i], inner[next], inner[i]];
+    triangles.push(makeTriangle(
+      idsA,
+      materialIndex,
+      [[0, 0], [1, 0], [1, 1]],
+      attributesForTriangle(idsA, attrMaps),
+    ));
+    triangles.push(makeTriangle(
+      idsB,
+      materialIndex,
+      [[0, 0], [1, 1], [0, 1]],
+      attributesForTriangle(idsB, attrMaps),
+    ));
   }
 
   controller.rebuildMesh(triangles);
@@ -184,7 +219,13 @@ export function fillSelected(controller) {
   controller.editor.checkpoint('Fill');
   const normal = estimateLoopNormal(loop, controller.vertices);
   const triangles = controller.triangles.map(cloneTriangle);
-  triangles.push(...triangulateLoop(loop, normal, 0, controller.vertices));
+  const loopSet = new Set(loop);
+  const touching = [];
+  controller.triangles.forEach((triangle, index) => {
+    if (triangle.v.some((id) => loopSet.has(id))) touching.push(index);
+  });
+  const attrMaps = faceAttributeMaps({ triangles: touching }, controller.triangles);
+  triangles.push(...triangulateLoop(loop, normal, 0, controller.vertices, null, attrMaps));
   controller.rebuildMesh(triangles);
   controller.status(`Fill · ${loop.length} вершин`);
   return true;
@@ -207,6 +248,9 @@ export function flipNormals(controller) {
     if (flipAll || selected.has(index)) {
       [next.v[1], next.v[2]] = [next.v[2], next.v[1]];
       [next.uv[1], next.uv[2]] = [next.uv[2], next.uv[1]];
+      for (const corners of Object.values(next.attrs ?? {})) {
+        [corners[1], corners[2]] = [corners[2], corners[1]];
+      }
     }
     return next;
   });
