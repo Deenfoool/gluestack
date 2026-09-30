@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import { attributesForTriangle, faceAttributeMaps, interpolateTuple } from './attributes.js';
 import {
   cloneTriangle,
   edgeKey,
+  makeTriangle,
   orderBoundaryLoop,
   triangleNormal,
   triangulateLoop,
@@ -22,19 +24,43 @@ function nearestPointOnEdge(point, a, b) {
   return { t, point: projected, distanceSq: point.distanceToSquared(projected) };
 }
 
-function orientedSplitTriangle(source, a, b, cutId, vertices) {
+function faceUvMap(group, triangles) {
+  const map = new Map();
+  for (const triangleIndex of group.triangles) {
+    const triangle = triangles[triangleIndex];
+    triangle.v.forEach((vertexId, corner) => {
+      if (!map.has(vertexId)) map.set(vertexId, triangle.uv[corner].clone());
+    });
+  }
+  return map;
+}
+
+function orientedSplitTriangle(source, a, b, cutId, vertices, factor) {
   const third = source.v.find((id) => id !== a && id !== b);
   if (third === undefined) return [];
   const normal = triangleNormal(source, vertices);
-  const result = [[a, cutId, third], [cutId, b, third]];
-  for (const ids of result) {
-    if (triangleNormal({ v: ids }, vertices).dot(normal) < 0) [ids[1], ids[2]] = [ids[2], ids[1]];
+  const uvMap = new Map();
+  source.v.forEach((id, corner) => uvMap.set(id, source.uv[corner].clone()));
+  uvMap.set(cutId, uvMap.get(a).clone().lerp(uvMap.get(b), factor));
+
+  const attrMaps = {};
+  for (const [name, corners] of Object.entries(source.attrs ?? {})) {
+    const map = new Map();
+    source.v.forEach((id, corner) => map.set(id, [...corners[corner]]));
+    map.set(cutId, interpolateTuple(map.get(a), map.get(b), factor));
+    attrMaps[name] = map;
   }
-  return result.map((ids) => ({
-    v: ids,
-    uv: ids.map(() => new THREE.Vector2()),
-    materialIndex: source.materialIndex ?? 0,
-  }));
+
+  const result = [[a, cutId, third], [cutId, b, third]];
+  return result.map((rawIds) => {
+    const ids = [...rawIds];
+    if (triangleNormal({ v: ids }, vertices).dot(normal) < 0) [ids[1], ids[2]] = [ids[2], ids[1]];
+    const uv = ids.map((id) => {
+      const value = uvMap.get(id) ?? new THREE.Vector2();
+      return [value.x, value.y];
+    });
+    return makeTriangle(ids, source.materialIndex ?? 0, uv, attributesForTriangle(ids, attrMaps));
+  });
 }
 
 export class KnifeTool {
@@ -145,6 +171,8 @@ export class KnifeTool {
     if (!group || loop.length < 3) return false;
 
     const vertices = cloneVertices(controller.vertices);
+    const uvMap = faceUvMap(group, controller.triangles);
+    const attrMaps = faceAttributeMaps(group, controller.triangles);
     const cuts = [];
     for (const snap of [start, end]) {
       let vertexId;
@@ -153,6 +181,12 @@ export class KnifeTool {
       else {
         vertexId = vertices.length;
         vertices.push({ position: snap.point.clone(), sources: [] });
+        const uvA = uvMap.get(snap.edge.a) ?? new THREE.Vector2();
+        const uvB = uvMap.get(snap.edge.b) ?? new THREE.Vector2();
+        uvMap.set(vertexId, uvA.clone().lerp(uvB, snap.t));
+        for (const map of Object.values(attrMaps)) {
+          map.set(vertexId, interpolateTuple(map.get(snap.edge.a), map.get(snap.edge.b), snap.t));
+        }
       }
       cuts.push({ ...snap, vertexId });
     }
@@ -212,12 +246,12 @@ export class KnifeTool {
     const triangles = controller.triangles.filter((_, index) => !remove.has(index)).map(cloneTriangle);
     controller.vertices = vertices;
     const materialIndex = controller.triangles[group.triangles[0]]?.materialIndex ?? 0;
-    triangles.push(...triangulateLoop(polygonA, group.normal, materialIndex, vertices));
-    triangles.push(...triangulateLoop(polygonB, group.normal, materialIndex, vertices));
+    triangles.push(...triangulateLoop(polygonA, group.normal, materialIndex, vertices, uvMap, attrMaps));
+    triangles.push(...triangulateLoop(polygonB, group.normal, materialIndex, vertices, uvMap, attrMaps));
 
     for (const [triangleId, cut] of externalSplits) {
       const source = controller.triangles[triangleId];
-      triangles.push(...orientedSplitTriangle(source, cut.edge.a, cut.edge.b, cut.vertexId, vertices));
+      triangles.push(...orientedSplitTriangle(source, cut.edge.a, cut.edge.b, cut.vertexId, vertices, cut.t));
     }
 
     controller.rebuildMesh(triangles);
