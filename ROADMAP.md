@@ -25,9 +25,10 @@
 - [x] Extrude Faces, Inset Face, Merge at Center, Fill Edge Loop.
 - [x] Delete Vertex / Edge / Face с пересборкой валидной геометрии.
 - [x] Recalculate / Flip Normals.
-- [ ] Bevel и Dissolve.
-- [ ] Loop Cut.
-- [ ] Knife.
+- [x] Bevel Face (базовый) и Dissolve Vertex / Edge.
+- [x] Loop Cut по quad-strip.
+- [x] Knife Center Cut (MVP).
+- [ ] Интерактивный Knife по произвольному сегменту/траектории.
 - [ ] Улучшить операции topology-editing с сохранением дополнительных custom vertex attributes импортированных GLB.
 
 ## Этап 3 — Modifiers
