@@ -14,6 +14,13 @@ function interpolationName(track) {
   return 'linear';
 }
 
+function supportsInterpolation(track, name) {
+  if (!track) return false;
+  if (name === 'step') return Boolean(track.InterpolantFactoryMethodDiscrete);
+  if (name === 'smooth') return Boolean(track.InterpolantFactoryMethodSmooth);
+  return Boolean(track.InterpolantFactoryMethodLinear);
+}
+
 function cloneTrackWithKeys(track, entries) {
   const size = track.getValueSize();
   const TrackClass = track.constructor;
@@ -265,11 +272,17 @@ export function installDopeSheet(editor) {
     const activeClip = clip();
     const track = activeClip?.tracks?.[selected?.trackIndex];
     if (!track) return false;
+    const mode = interpolation.value;
+    if (!supportsInterpolation(track, mode)) {
+      interpolation.value = interpolationName(track);
+      editor.events.onStatus(`${track.ValueTypeName || track.constructor.name}: interpolation ${mode} не поддерживается`);
+      return false;
+    }
     editor.checkpoint('Change keyframe interpolation');
-    track.setInterpolation(INTERPOLATIONS[interpolation.value] ?? THREE.InterpolateLinear);
+    track.setInterpolation(INTERPOLATIONS[mode] ?? THREE.InterpolateLinear);
     emitChanged();
     renderRows();
-    editor.events.onStatus(`Interpolation · ${interpolation.value}`);
+    editor.events.onStatus(`Interpolation · ${mode}`);
     return true;
   }
 
