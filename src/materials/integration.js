@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { refreshIcons } from '../ui.js';
+import { disposeTextureIfUnreferenced } from '../runtime/resource-ownership.js';
 
 function materialOf(mesh) {
   if (!mesh?.isMesh) return null;
@@ -100,8 +101,7 @@ export function installMaterialPanel({ editor }) {
   function refresh() {
     const material = current();
     if (!material) return;
-    const color = panel.querySelector('[data-mat="color"]');
-    color.value = `#${material.color.getHexString()}`;
+    panel.querySelector('[data-mat="color"]').value = `#${material.color.getHexString()}`;
     panel.querySelector('[data-mat="metalness"]').value = material.metalness;
     panel.querySelector('[data-mat="roughness"]').value = material.roughness;
     panel.querySelector('[data-mat="opacity"]').value = material.opacity;
@@ -152,8 +152,9 @@ export function installMaterialPanel({ editor }) {
         editor.checkpoint(`Texture ${input.dataset.texture}`);
         const key = input.dataset.texture;
         const texture = await loadTexture(file, key === 'map' || key === 'emissiveMap');
-        material[key]?.dispose?.();
+        const oldTexture = material[key];
         material[key] = texture;
+        disposeTextureIfUnreferenced(editor, oldTexture);
         if (key === 'aoMap' && !editor.selected.geometry.getAttribute('uv1')) {
           const uv = editor.selected.geometry.getAttribute('uv');
           if (uv) editor.selected.geometry.setAttribute('uv1', uv.clone());
@@ -173,12 +174,15 @@ export function installMaterialPanel({ editor }) {
     const material = current();
     if (!material) return;
     editor.checkpoint('Clear textures');
+    const detached = [];
     for (const key of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap']) {
-      material[key]?.dispose?.();
+      if (material[key]) detached.push(material[key]);
       material[key] = null;
     }
+    detached.forEach((texture) => disposeTextureIfUnreferenced(editor, texture));
     material.needsUpdate = true;
     editor.events.onStatus('Текстуры материала очищены');
+    window.dispatchEvent(new CustomEvent('gluestack:texture-changed', { detail: { mesh: editor.selected, texture: null, key: 'map' } }));
   });
 
   function applyTextureTransform() {
