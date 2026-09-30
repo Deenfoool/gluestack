@@ -6,6 +6,7 @@ import { installTexturePaint } from './paint/integration.js';
 import { installProceduralGenerators } from './procedural/integration.js';
 import { installSceneControls } from './scene/integration.js';
 import { installRuntimeHardening } from './runtime/hardening.js';
+import { installDiagnostics } from './runtime/diagnostics.js';
 
 export function installFeatures({ editor, editMode, knifeTool, requestNumber }) {
   const uv = installUVWorkspace({ editor, editMode, knifeTool, requestNumber });
@@ -29,5 +30,7 @@ export function installFeatures({ editor, editMode, knifeTool, requestNumber }) 
   });
 
   const hardening = installRuntimeHardening({ editor, projects, editMode });
-  return { uv, materials, projects, gameReady, paint, procedural, scene, hardening };
+  const installed = { uv, materials, projects, gameReady, paint, procedural, scene, hardening };
+  const diagnostics = installDiagnostics({ editor, projects, features: installed });
+  return { ...installed, diagnostics };
 }
