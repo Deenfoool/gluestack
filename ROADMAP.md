@@ -9,13 +9,14 @@
 - [x] Выбор объектов и Move / Rotate / Scale gizmo.
 - [x] Создание базовых примитивов.
 - [x] Импорт `.glb/.gltf` и экспорт `.glb`.
+- [x] Lucide icons.
 
 ## Этап 1 — Object Mode
-- [ ] Undo / Redo с общей историей операций.
-- [ ] Collections, parenting и полноценная иерархия Outliner.
-- [ ] Duplicate, Join, Separate, Apply Transform, Origin/Pivot.
-- [ ] Blender-подобный ввод `G X 2`, `R Z 90`, `S 2`.
-- [ ] Snapping и настройки сетки.
+- [x] Undo / Redo с общей историей операций.
+- [x] Collections, parenting и иерархия Outliner.
+- [x] Multi-select, Duplicate, Join, Separate Group, Apply Transform, Origin/Pivot.
+- [x] Blender-подобный числовой ввод `G X 2`, `R Z 90`, `S 2`.
+- [x] Базовый snapping для TransformControls.
 
 ## Этап 2 — Edit Mode
 - [ ] Выбор Vertex / Edge / Face.
