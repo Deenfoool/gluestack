@@ -10,7 +10,8 @@
     {
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+        "lucide": "https://cdn.jsdelivr.net/npm/lucide@0.468.0/+esm"
       }
     }
   </script>
@@ -18,31 +19,63 @@
 <body>
   <div class="app-shell">
     <header class="main-menu-bar">
-      <div class="app-mark">gluestack</div>
+      <div class="app-mark"><i data-lucide="box"></i><span>gluestack</span></div>
+
       <details class="menu" id="file-menu">
         <summary>File</summary>
         <div class="menu-popover">
-          <button type="button" data-action="new">New</button>
-          <button type="button" data-action="import">Import GLB/GLTF…</button>
+          <button type="button" data-action="new"><i data-lucide="file-plus-2"></i><span>New</span></button>
+          <button type="button" data-action="import"><i data-lucide="upload"></i><span>Import GLB/GLTF…</span></button>
           <div class="menu-separator"></div>
-          <button type="button" data-action="export">Export GLB…</button>
+          <button type="button" data-action="export"><i data-lucide="download"></i><span>Export GLB…</span></button>
         </div>
       </details>
-      <button type="button" class="menu-button" disabled>Edit</button>
+
+      <details class="menu" id="edit-menu">
+        <summary>Edit</summary>
+        <div class="menu-popover">
+          <button type="button" data-history="undo"><i data-lucide="undo-2"></i><span>Undo</span><kbd>Ctrl Z</kbd></button>
+          <button type="button" data-history="redo"><i data-lucide="redo-2"></i><span>Redo</span><kbd>Ctrl ⇧ Z</kbd></button>
+        </div>
+      </details>
+
       <details class="menu" id="add-menu">
         <summary>Add</summary>
         <div class="menu-popover">
-          <button type="button" data-primitive="cube">Mesh › Cube</button>
-          <button type="button" data-primitive="sphere">Mesh › UV Sphere</button>
-          <button type="button" data-primitive="cylinder">Mesh › Cylinder</button>
-          <button type="button" data-primitive="cone">Mesh › Cone</button>
-          <button type="button" data-primitive="plane">Mesh › Plane</button>
-          <button type="button" data-primitive="torus">Mesh › Torus</button>
+          <button type="button" data-primitive="cube"><i data-lucide="box"></i><span>Mesh › Cube</span></button>
+          <button type="button" data-primitive="sphere"><i data-lucide="circle"></i><span>Mesh › UV Sphere</span></button>
+          <button type="button" data-primitive="cylinder"><i data-lucide="cylinder"></i><span>Mesh › Cylinder</span></button>
+          <button type="button" data-primitive="cone"><i data-lucide="triangle"></i><span>Mesh › Cone</span></button>
+          <button type="button" data-primitive="plane"><i data-lucide="square"></i><span>Mesh › Plane</span></button>
+          <button type="button" data-primitive="torus"><i data-lucide="circle-dot"></i><span>Mesh › Torus</span></button>
+          <div class="menu-separator"></div>
+          <button type="button" data-action="collection"><i data-lucide="folder-plus"></i><span>Collection</span></button>
         </div>
       </details>
-      <button type="button" class="menu-button" disabled>Object</button>
+
+      <details class="menu" id="object-menu">
+        <summary>Object</summary>
+        <div class="menu-popover wide-menu">
+          <button type="button" data-action="duplicate"><i data-lucide="copy"></i><span>Duplicate</span><kbd>Shift D</kbd></button>
+          <button type="button" data-action="parent"><i data-lucide="link"></i><span>Parent to Active</span><kbd>Ctrl P</kbd></button>
+          <button type="button" data-action="unparent"><i data-lucide="unlink"></i><span>Clear Parent</span><kbd>Alt P</kbd></button>
+          <div class="menu-separator"></div>
+          <button type="button" data-action="join"><i data-lucide="combine"></i><span>Join</span><kbd>Ctrl J</kbd></button>
+          <button type="button" data-action="separate"><i data-lucide="scissors"></i><span>Separate Group</span></button>
+          <div class="menu-separator"></div>
+          <button type="button" data-action="apply-transform"><i data-lucide="check"></i><span>Apply Transform</span><kbd>Ctrl A</kbd></button>
+          <button type="button" data-action="origin-geometry"><i data-lucide="crosshair"></i><span>Origin to Geometry</span></button>
+          <div class="menu-separator"></div>
+          <button type="button" data-action="delete"><i data-lucide="trash-2"></i><span>Delete</span><kbd>X</kbd></button>
+        </div>
+      </details>
+
       <div class="main-menu-spacer"></div>
-      <span class="build-label">Object Mode · v0.1</span>
+      <div class="header-actions" aria-label="History">
+        <button type="button" class="header-action" data-history="undo" title="Undo (Ctrl+Z)"><i data-lucide="undo-2"></i></button>
+        <button type="button" class="header-action" data-history="redo" title="Redo (Ctrl+Shift+Z)"><i data-lucide="redo-2"></i></button>
+      </div>
+      <span class="build-label">Object Mode · v0.2</span>
     </header>
 
     <nav class="workspace-tabs" aria-label="Workspaces">
@@ -51,40 +84,49 @@
       <button type="button" class="workspace-tab" disabled title="По roadmap">UV Editing</button>
       <button type="button" class="workspace-tab" disabled title="По roadmap">Shading</button>
       <div class="workspace-spacer"></div>
-      <button type="button" class="viewport-command" data-view="frame">Frame Selected</button>
+      <button type="button" class="viewport-command icon-text" data-view="frame" title="Frame Selected"><i data-lucide="focus"></i><span>Frame Selected</span></button>
     </nav>
 
     <main class="workspace">
       <aside class="toolbar" aria-label="Toolbar">
-        <button type="button" class="tool-button active" data-transform-mode="translate" title="Move (G)">↔</button>
-        <button type="button" class="tool-button" data-transform-mode="rotate" title="Rotate (R)">⟳</button>
-        <button type="button" class="tool-button" data-transform-mode="scale" title="Scale (S)">◇</button>
+        <button type="button" class="tool-button active" data-transform-mode="translate" title="Move (G)"><i data-lucide="move"></i></button>
+        <button type="button" class="tool-button" data-transform-mode="rotate" title="Rotate (R)"><i data-lucide="rotate-cw"></i></button>
+        <button type="button" class="tool-button" data-transform-mode="scale" title="Scale (S)"><i data-lucide="maximize-2"></i></button>
         <div class="toolbar-separator"></div>
-        <button type="button" class="tool-button" data-action="delete" title="Delete (X)">×</button>
+        <button type="button" class="tool-button" data-action="duplicate" title="Duplicate (Shift+D)"><i data-lucide="copy"></i></button>
+        <button type="button" class="tool-button" data-snap aria-pressed="false" title="Snap (Shift+Tab)"><i data-lucide="magnet"></i></button>
+        <div class="toolbar-separator"></div>
+        <button type="button" class="tool-button danger" data-action="delete" title="Delete (X)"><i data-lucide="trash-2"></i></button>
       </aside>
 
       <section class="viewport-panel">
         <div class="viewport-header">
           <div class="mode-chip">Object Mode</div>
-          <span class="viewport-hint">MMB orbit · Shift+MMB pan · Wheel zoom</span>
+          <span class="viewport-hint">Shift+Click multi-select · MMB orbit · Shift+MMB pan · Wheel zoom</span>
           <div class="viewport-header-spacer"></div>
-          <button type="button" class="header-icon active" title="Solid">●</button>
-          <button type="button" class="header-icon" disabled title="Material Preview — по roadmap">◐</button>
+          <button type="button" class="header-icon active" title="Solid"><i data-lucide="circle"></i></button>
+          <button type="button" class="header-icon" disabled title="Material Preview — по roadmap"><i data-lucide="circle-dot"></i></button>
         </div>
-        <div id="viewport" class="viewport"></div>
+        <div id="viewport" class="viewport">
+          <div id="transform-hud" class="transform-hud" hidden></div>
+        </div>
       </section>
 
       <aside class="right-column">
         <section class="panel outliner-panel">
-          <div class="panel-header">Scene Collection</div>
+          <div class="panel-header">
+            <span>Scene Collection</span>
+            <div class="panel-header-spacer"></div>
+            <button type="button" class="panel-icon" data-action="collection" title="New Collection"><i data-lucide="folder-plus"></i></button>
+          </div>
           <div id="outliner" class="outliner" aria-label="Outliner"></div>
         </section>
 
         <section class="panel properties-panel">
           <div class="properties-tabs" aria-label="Properties tabs">
-            <button type="button" class="property-tab active" title="Object">□</button>
-            <button type="button" class="property-tab" disabled title="Modifiers — по roadmap">⌘</button>
-            <button type="button" class="property-tab" disabled title="Material — по roadmap">●</button>
+            <button type="button" class="property-tab active" title="Object"><i data-lucide="box"></i></button>
+            <button type="button" class="property-tab" disabled title="Modifiers — по roadmap"><i data-lucide="wrench"></i></button>
+            <button type="button" class="property-tab" disabled title="Material — по roadmap"><i data-lucide="circle-dot"></i></button>
           </div>
           <div class="properties-content">
             <div id="empty-properties" class="empty-properties">Выберите объект</div>
@@ -122,12 +164,11 @@
     <footer class="status-bar">
       <span id="status-message">Готово</span>
       <div class="status-spacer"></div>
-      <span id="scene-stats">Objects 0 · Vertices 0 · Triangles 0</span>
+      <span id="scene-stats">Objects 0 · Selected 0 · Vertices 0 · Triangles 0</span>
     </footer>
   </div>
 
   <input id="file-input" type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" hidden />
-
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>
