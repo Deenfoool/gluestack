@@ -21,5 +21,11 @@ export function installFeatures({ editor, editMode, knifeTool, requestNumber }) 
     if (materials && !materials.panel.hidden) materials.refresh();
   };
 
+  document.querySelector('.workspace-tabs')?.addEventListener('click', (event) => {
+    const tab = event.target.closest('.workspace-tab');
+    if (!tab || tab.disabled) return;
+    document.querySelectorAll('.workspace-tab').forEach((item) => item.classList.toggle('active', item === tab));
+  });
+
   return { uv, materials, projects, gameReady, paint, procedural, scene };
 }
