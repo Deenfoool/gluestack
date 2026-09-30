@@ -1,13 +1,23 @@
 import { bevelFace } from './edit/bevel.js';
 import { dissolveSelected } from './edit/dissolve.js';
-import { knifeCenter, loopCut } from './edit/cuts.js';
+import { loopCut } from './edit/cuts.js';
 
-export function bindKeyboard({ editor, editMode, transformModal, snapButton, openAddMenu, requestNumber }) {
+export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snapButton, openAddMenu, requestNumber }) {
   window.addEventListener('keydown', (event) => {
     const target = event.target;
     const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable;
     if (typing) return;
     if (transformModal.handleKey(event)) return;
+
+    if (knifeTool.active) {
+      if (event.code === 'Escape' || event.code === 'KeyK') {
+        event.preventDefault();
+        knifeTool.cancel();
+        return;
+      }
+      event.preventDefault();
+      return;
+    }
 
     const commandKey = event.ctrlKey || event.metaKey;
     if (commandKey && event.code === 'KeyZ') {
@@ -69,7 +79,7 @@ export function bindKeyboard({ editor, editMode, transformModal, snapButton, ope
       }
       if (event.code === 'KeyM') { event.preventDefault(); editMode.mergeSelected(); return; }
       if (event.code === 'KeyF') { event.preventDefault(); editMode.fillSelected(); return; }
-      if (event.code === 'KeyK') { event.preventDefault(); knifeCenter(editMode); return; }
+      if (event.code === 'KeyK') { event.preventDefault(); knifeTool.begin(); return; }
       if (event.shiftKey && event.code === 'KeyN') { event.preventDefault(); editMode.recalculateNormals(); return; }
       if (event.code === 'KeyX' || event.code === 'Delete') { event.preventDefault(); editMode.deleteSelection(); return; }
       if (commandKey || event.altKey) return;
