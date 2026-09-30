@@ -95,7 +95,7 @@
         <button type="button" class="header-action" data-history="undo" title="Undo (Ctrl+Z)"><i data-lucide="undo-2"></i></button>
         <button type="button" class="header-action" data-history="redo" title="Redo (Ctrl+Shift+Z)"><i data-lucide="redo-2"></i></button>
       </div>
-      <span class="build-label">Object Mode · v0.4</span>
+      <span class="build-label">Object Mode · v0.5</span>
     </header>
 
     <nav class="workspace-tabs" aria-label="Workspaces">
@@ -161,8 +161,8 @@
 
         <section class="panel properties-panel">
           <div class="properties-tabs" aria-label="Properties tabs">
-            <button type="button" class="property-tab active" title="Object"><i data-lucide="box"></i></button>
-            <button type="button" class="property-tab" disabled title="Modifiers — по roadmap"><i data-lucide="wrench"></i></button>
+            <button type="button" class="property-tab active" data-property-tab="object" title="Object"><i data-lucide="box"></i></button>
+            <button type="button" class="property-tab" data-property-tab="modifiers" title="Modifiers"><i data-lucide="wrench"></i></button>
             <button type="button" class="property-tab" disabled title="Material — по roadmap"><i data-lucide="circle-dot"></i></button>
           </div>
           <div class="properties-content">
@@ -191,6 +191,43 @@
                   <label>Y <input data-transform="scale.y" type="number" step="0.01" /></label>
                   <label>Z <input data-transform="scale.z" type="number" step="0.01" /></label>
                 </div>
+              </div>
+            </div>
+
+            <div id="modifier-properties" hidden>
+              <div class="modifier-card">
+                <div class="modifier-title"><i data-lucide="flip-horizontal-2"></i><span>Mirror</span></div>
+                <div class="modifier-axis-row">
+                  <button type="button" data-modifier-mirror="x">X</button>
+                  <button type="button" data-modifier-mirror="y">Y</button>
+                  <button type="button" data-modifier-mirror="z">Z</button>
+                </div>
+                <div class="modifier-note">Зеркалирование относительно локального origin. Apply сразу записывает геометрию; Ctrl+Z отменяет.</div>
+              </div>
+
+              <div class="modifier-card">
+                <div class="modifier-title"><i data-lucide="copy-plus"></i><span>Array</span></div>
+                <div class="modifier-field"><span>Count</span><input id="modifier-array-count" type="number" min="2" max="100" step="1" value="2" /></div>
+                <div class="modifier-vector-grid">
+                  <span>Offset</span>
+                  <label>X <input id="modifier-array-x" type="number" step="0.1" value="2" /></label>
+                  <label>Y <input id="modifier-array-y" type="number" step="0.1" value="0" /></label>
+                  <label>Z <input id="modifier-array-z" type="number" step="0.1" value="0" /></label>
+                </div>
+                <button type="button" class="modifier-apply" data-modifier-array><i data-lucide="check"></i><span>Apply Array</span></button>
+              </div>
+
+              <div class="modifier-card">
+                <div class="modifier-title"><i data-lucide="layers-3"></i><span>Solidify</span></div>
+                <div class="modifier-field"><span>Thickness</span><input id="modifier-solidify-thickness" type="number" step="0.01" value="0.1" /></div>
+                <button type="button" class="modifier-apply" data-modifier-solidify><i data-lucide="check"></i><span>Apply Solidify</span></button>
+              </div>
+
+              <div class="modifier-card">
+                <div class="modifier-title"><i data-lucide="grid-3x3"></i><span>Subdivision</span></div>
+                <div class="modifier-field"><span>Levels</span><input id="modifier-subdivision-levels" type="number" min="1" max="3" step="1" value="1" /></div>
+                <div class="modifier-note">Loop-style subdivision для треугольной topology. Каждый уровень увеличивает число треугольников примерно в 4 раза.</div>
+                <button type="button" class="modifier-apply" data-modifier-subdivision><i data-lucide="check"></i><span>Apply Subdivision</span></button>
               </div>
             </div>
           </div>
