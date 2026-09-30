@@ -51,6 +51,17 @@ function addImportedScene(editor, imported, label) {
   return imported;
 }
 
+function parseGltf(editor, payload) {
+  return new Promise((resolve, reject) => {
+    editor.loader.parse(
+      payload,
+      '',
+      resolve,
+      (error) => reject(error instanceof Error ? error : new Error(String(error))),
+    );
+  });
+}
+
 async function parseWithResolver(editor, payload, fileMap, label) {
   const urls = new Map();
   const manager = editor.loader.manager;
@@ -62,14 +73,7 @@ async function parseWithResolver(editor, payload, fileMap, label) {
   });
 
   try {
-    const gltf = await new Promise((resolve, reject) => {
-      editor.loader.parse(
-        payload,
-        '',
-        resolve,
-        (error) => reject(error instanceof Error ? error : new Error(String(error))),
-      );
-    });
+    const gltf = await parseGltf(editor, payload);
     return addImportedScene(editor, gltf.scene, label);
   } finally {
     manager.setURLModifier(undefined);
@@ -104,14 +108,8 @@ export function installImportPipeline({ editor, editMode, knifeTool }) {
       editor.events.onStatus(`Импорт: ${primary.name}…`);
 
       if (/\.glb$/i.test(primary.name)) {
-        const gltf = await new Promise((resolve, reject) => {
-          editor.loader.parse(
-            await primary.arrayBuffer(),
-            '',
-            resolve,
-            (error) => reject(error instanceof Error ? error : new Error(String(error))),
-          );
-        });
+        const payload = await primary.arrayBuffer();
+        const gltf = await parseGltf(editor, payload);
         addImportedScene(editor, gltf.scene, primary.name.replace(/\.glb$/i, ''));
         return;
       }
