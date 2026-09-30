@@ -1,19 +1,16 @@
 # gluestack
 
-gluestack — браузерный 3D-моделлер с интерфейсом и логикой работы, близкими к Blender. Он предназначен для создания моделей с нуля, редактирования `.glb/.gltf`, дальнейшей работы с UV и текстурами и экспорта готового `.glb` прямо в браузере.
+gluestack — браузерный 3D-моделлер с Blender-подобным интерфейсом для создания моделей с нуля, редактирования `.glb/.gltf` и экспорта готового `.glb` прямо в браузере.
 
 ## Основное
 
-- Object Mode и настоящий Edit Mode с Vertex / Edge / Face;
-- создание примитивов и mesh-редактирование;
-- импорт `.glb/.gltf` и экспорт `.glb`;
-- Blender-подобные viewport, Outliner, Properties и горячие клавиши;
-- Lucide Icons в интерфейсе;
-- UV Editor, материалы и PBR-текстуры — следующие этапы roadmap;
-- без backend: вычисления и файлы остаются в браузере;
-- статическое размещение на GitHub Pages.
-
-Текущий этап: Edit Mode — transform компонентов, Extrude, Inset, Merge, Fill, Delete и normals. Далее: Bevel, Dissolve, Loop Cut и Knife.
+- Object Mode и Edit Mode: Vertex / Edge / Face, Extrude, Inset, Bevel, Knife, Loop Cut и другие mesh-операции;
+- модификаторы, UV Editing, PBR-материалы, текстуры и 3D Texture Paint;
+- процедурные low-poly Rock / Island / Tree / Crate;
+- локальные проекты, autosave и собственный формат `.gluestack`;
+- Game Ready анализ, оптимизация, LOD и контроль размера GLB;
+- Blender-подобные viewport, Outliner, Properties, workspaces и горячие клавиши;
+- Three.js + Lucide, без backend; рассчитан на статический GitHub Pages.
 
 ## Проект
 
