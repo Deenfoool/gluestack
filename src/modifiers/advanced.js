@@ -2,6 +2,19 @@ import { SimplifyModifier } from 'three/addons/modifiers/SimplifyModifier.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cloneTriangle, readMeshTopology } from '../edit/topology.js';
 
+const DECIMATE_SAFE_ATTRIBUTES = new Set(['position', 'normal']);
+const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap'];
+
+function hasMorphData(mesh) {
+  if (mesh.morphTargetInfluences?.length) return true;
+  return Object.values(mesh.geometry?.morphAttributes ?? {}).some((items) => items?.length);
+}
+
+function materialUsesTextures(mesh) {
+  const materials = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
+  return materials.some((material) => TEXTURE_SLOTS.some((slot) => material?.[slot]?.isTexture));
+}
+
 export function applyTriangulate(modifiers) {
   const mesh = modifiers.getMesh();
   if (!mesh) return false;
@@ -21,6 +34,15 @@ export async function applyDecimate(modifiers, ratio = 0.5) {
   }
   if (Array.isArray(mesh.material) && mesh.material.length > 1) {
     modifiers.onStatus('Decimate: multi-material Mesh пока не поддерживается');
+    return false;
+  }
+  if (hasMorphData(mesh)) {
+    modifiers.onStatus('Decimate отменён: morph targets требуют отдельного safe pipeline');
+    return false;
+  }
+  const unsupported = Object.keys(mesh.geometry.attributes).filter((name) => !DECIMATE_SAFE_ATTRIBUTES.has(name));
+  if (unsupported.length || materialUsesTextures(mesh)) {
+    modifiers.onStatus(`Decimate отменён: SimplifyModifier не сохраняет безопасно ${unsupported.length ? unsupported.join(', ') : 'texture coordinates'}`);
     return false;
   }
 
@@ -53,11 +75,8 @@ export async function applyDecimate(modifiers, ratio = 0.5) {
     modifiers.editor.checkpoint('Decimate');
     mesh.geometry.dispose();
     mesh.geometry = simplified;
-    if (!mesh.geometry.getAttribute('normal')) mesh.geometry.computeVertexNormals();
-    else {
-      mesh.geometry.computeVertexNormals();
-      mesh.geometry.normalizeNormals();
-    }
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.normalizeNormals();
     mesh.geometry.computeBoundingBox();
     mesh.geometry.computeBoundingSphere();
     modifiers.editor.refreshSelectionVisuals();
