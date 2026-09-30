@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { refreshIcons } from '../ui.js';
+import { disposeTextureIfUnreferenced } from '../runtime/resource-ownership.js';
 
 function getMaterial(mesh) {
   const material = Array.isArray(mesh?.material) ? mesh.material[0] : mesh?.material;
@@ -113,6 +114,7 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
     texture = paintTextureFromCanvas(paintCanvas, old);
     material.map = texture;
     material.needsUpdate = true;
+    disposeTextureIfUnreferenced(editor, old);
     window.dispatchEvent(new CustomEvent('gluestack:texture-changed', { detail: { mesh, texture, key: 'map' } }));
     return true;
   }
