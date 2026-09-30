@@ -56,22 +56,37 @@ export class ProjectController {
     });
   }
 
-  async exportSceneBuffer() {
-    return new Promise((resolve, reject) => {
-      this.editor.exporter.parse(
-        this.editor.modelRoot,
-        resolve,
-        reject,
-        { binary: true, onlyVisible: false, trs: false, maxTextureSize: 4096 },
-      );
-    });
+  async waitForModifierStack() {
+    if (this.editor.modifierStack) return this.editor.modifierStack;
+    if (this.editor.modifierStackReady) {
+      try { await this.editor.modifierStackReady; } catch {}
+    }
+    return this.editor.modifierStack ?? null;
+  }
+
+  async exportSceneBuffer({ project = false } = {}) {
+    const stack = project ? await this.waitForModifierStack() : null;
+    const payload = stack?.createProjectExportRoot?.() ?? null;
+    const root = payload?.root ?? this.editor.modelRoot;
+    try {
+      return await new Promise((resolve, reject) => {
+        this.editor.exporter.parse(
+          root,
+          resolve,
+          reject,
+          { binary: true, onlyVisible: false, trs: false, maxTextureSize: 4096 },
+        );
+      });
+    } finally {
+      if (payload) stack?.disposeProjectExportRoot?.(payload);
+    }
   }
 
   metadata() {
     this.editor.assignIds(this.editor.modelRoot);
     return {
       format: 'gluestack-project',
-      version: 1,
+      version: 2,
       name: this.name,
       savedAt: new Date().toISOString(),
       camera: {
@@ -91,7 +106,7 @@ export class ProjectController {
   }
 
   async encodeProject() {
-    const glb = await this.exportSceneBuffer();
+    const glb = await this.exportSceneBuffer({ project: true });
     const metadataBytes = new TextEncoder().encode(JSON.stringify(this.metadata()));
     const magic = new TextEncoder().encode(MAGIC);
     const output = new Uint8Array(magic.length + 4 + metadataBytes.length + glb.byteLength);
@@ -134,6 +149,9 @@ export class ProjectController {
     else this.editor.animations = [...(gltf.animations ?? [])];
     this.editor.assignIds(this.editor.modelRoot);
 
+    const stack = await this.waitForModifierStack();
+    stack?.restoreAll?.();
+
     const byId = new Map();
     this.editor.modelRoot.traverse((object) => {
       if (object.userData?.gluestackId) byId.set(object.userData.gluestackId, object);
@@ -158,7 +176,14 @@ export class ProjectController {
     this.editor.events.onStructure();
     this.editor.events.onTransform(this.editor.selected);
     const clips = this.editor.animations?.length ?? 0;
-    this.status(`Проект «${this.name}» открыт${clips ? ` · animations ${clips}` : ''}`);
+    const stacks = [...this.editor.modelRoot.children].length && this.editor.modifierStack
+      ? (() => {
+          let count = 0;
+          this.editor.modelRoot.traverse((object) => { if (this.editor.modifierStack.hasStack?.(object)) count += 1; });
+          return count;
+        })()
+      : 0;
+    this.status(`Проект «${this.name}» открыт${clips ? ` · animations ${clips}` : ''}${stacks ? ` · modifier stacks ${stacks}` : ''}`);
   }
 
   async openProjectBuffer(buffer) {
