@@ -42,13 +42,16 @@
 Модификаторы на текущем этапе применяются destructive-операцией с общей Undo/Redo историей. Неразрушающий стек будет логично добавлять вместе с полноценным форматом проекта, чтобы параметры стека корректно сохранялись между сессиями.
 
 ## Этап 4 — UV Editing
-- [ ] Отдельный workspace UV Editing.
-- [ ] UV Vertex / Edge / Island selection.
-- [ ] Mark Seam / Clear Seam.
-- [ ] Unwrap и Smart UV Project.
-- [ ] Cube / Cylinder / Sphere / View projection.
-- [ ] Move / Rotate / Scale UV-островов.
-- [ ] Pack Islands и Average Island Scale.
+- [x] Отдельный workspace UV Editing с UV canvas и существующим Three.js viewport без второго renderer.
+- [x] UV Vertex / Edge / Island selection, Shift multi-select и Select All.
+- [x] Mark Seam / Clear Seam для выделенных рёбер в Edit Mode; отдельная очистка всех seams.
+- [x] Unwrap по seam-islands и Smart UV Project.
+- [x] Cube / Cylinder / Sphere / View projection.
+- [x] Move / Rotate / Scale выбранных UV; drag-move непосредственно в UV Editor.
+- [x] Pack Islands и Average Island Scale.
+- [x] Фоновая checker/reference texture для контроля развёртки.
+
+UV Editing работает непосредственно с `geometry.attributes.uv`, поэтому изменённые координаты попадают в экспортируемый `.glb`. Для независимых corner UV индексированная геометрия при первом UV-редактировании переводится в non-indexed представление с общей Undo/Redo историей.
 
 ## Этап 5 — материалы и текстуры
 - [ ] PBR-материалы glTF.
