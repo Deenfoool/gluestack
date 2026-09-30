@@ -118,7 +118,7 @@ export function renderModeUI(editor, editMode, elements) {
   editSelectModes.hidden = !editMode.active;
   objectMenu.hidden = editMode.active;
   meshMenu.hidden = !editMode.active;
-  buildLabel.textContent = editMode.active ? 'Edit Mode · v0.3' : 'Object Mode · v0.3';
+  buildLabel.textContent = editMode.active ? 'Edit Mode · v0.4' : 'Object Mode · v0.4';
 
   document.querySelectorAll('[data-edit-select-mode]').forEach((button) => {
     button.classList.toggle('active', editMode.active && button.dataset.editSelectMode === editMode.selectionMode);
