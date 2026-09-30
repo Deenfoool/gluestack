@@ -1,10 +1,12 @@
+import { refreshIcons } from '../ui.js';
 import { UVController } from './controller.js';
 
 function button(action, icon, label) {
   return `<button type="button" class="uv-action" data-uv-action="${action}"><i data-lucide="${icon}"></i><span>${label}</span></button>`;
 }
 
-export function installUVWorkspace({ editor, editMode, knifeTool, setStatus, requestNumber, refreshIcons }) {
+export function installUVWorkspace({ editor, editMode, knifeTool, requestNumber }) {
+  const setStatus = (message) => editor.events.onStatus(message);
   const modelWorkspace = document.querySelector('main.workspace');
   const viewport = document.querySelector('#viewport');
   const originalViewportParent = viewport.parentElement;
