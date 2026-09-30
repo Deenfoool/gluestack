@@ -54,11 +54,13 @@
 UV Editing работает непосредственно с `geometry.attributes.uv`, поэтому изменённые координаты попадают в экспортируемый `.glb`. Для независимых corner UV индексированная геометрия при первом UV-редактировании переводится в non-indexed представление с общей Undo/Redo историей.
 
 ## Этап 5 — материалы и текстуры
-- [ ] PBR-материалы glTF.
-- [ ] Base Color, Normal, Roughness, Metallic, AO, Emissive.
-- [ ] Загрузка и замена текстур.
-- [ ] Material Preview.
-- [ ] Texture transform и предпросмотр в UV Editor.
+- [x] PBR-материалы на `MeshStandardMaterial`, совместимые с glTF/GLB pipeline.
+- [x] Base Color, Normal, Roughness, Metallic, AO, Emissive и Opacity.
+- [x] Загрузка, замена и очистка текстур PNG/JPEG/WebP.
+- [x] Material Preview во viewport.
+- [x] Texture Offset / Scale / Rotation и Base Color preview в UV Editor.
+
+Материал редактируется непосредственно на Mesh, поэтому параметры и карты передаются существующему `GLTFExporter`. Для multi-material Mesh на текущем этапе Material Properties редактирует первый material slot.
 
 ## Этап 6 — проекты
 - [ ] Локальные проекты через IndexedDB.
