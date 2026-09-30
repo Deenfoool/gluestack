@@ -6,7 +6,12 @@ import { installMaterialPanel } from './materials/integration.js';
 
 export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snapButton, openAddMenu, requestNumber }) {
   installUVWorkspace({ editor, editMode, knifeTool, requestNumber });
-  installMaterialPanel({ editor });
+  const materialPanel = installMaterialPanel({ editor });
+  const previousSelectionHandler = editor.events.onSelection;
+  editor.events.onSelection = (...args) => {
+    previousSelectionHandler(...args);
+    if (materialPanel && !materialPanel.panel.hidden) materialPanel.refresh();
+  };
 
   window.addEventListener('keydown', (event) => {
     const target = event.target;
