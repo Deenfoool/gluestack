@@ -9,15 +9,25 @@ import { installRuntimeHardening } from './runtime/hardening.js';
 import { installDiagnostics } from './runtime/diagnostics.js';
 import { installResourceOwnership } from './runtime/resource-ownership.js';
 
+function safeInstall(editor, name, factory) {
+  try {
+    return factory();
+  } catch (error) {
+    console.error(`[gluestack] ${name} failed to install`, error);
+    editor.events.onStatus(`${name}: модуль не загрузился — см. консоль`);
+    return null;
+  }
+}
+
 export function installFeatures({ editor, editMode, knifeTool, requestNumber }) {
-  const resources = installResourceOwnership(editor);
-  const uv = installUVWorkspace({ editor, editMode, knifeTool, requestNumber });
-  const materials = installMaterialPanel({ editor });
-  const projects = installProjects({ editor, editMode, knifeTool });
-  const gameReady = installGameReady({ editor });
-  const paint = installTexturePaint({ editor, editMode, knifeTool });
-  const procedural = installProceduralGenerators({ editor });
-  const scene = installSceneControls({ editor });
+  const resources = safeInstall(editor, 'Resource ownership', () => installResourceOwnership(editor));
+  const uv = safeInstall(editor, 'UV Editing', () => installUVWorkspace({ editor, editMode, knifeTool, requestNumber }));
+  const materials = safeInstall(editor, 'Materials', () => installMaterialPanel({ editor }));
+  const projects = safeInstall(editor, 'Projects', () => installProjects({ editor, editMode, knifeTool }));
+  const gameReady = safeInstall(editor, 'Game Ready', () => installGameReady({ editor }));
+  const paint = safeInstall(editor, 'Texture Paint', () => installTexturePaint({ editor, editMode, knifeTool }));
+  const procedural = safeInstall(editor, 'Procedural', () => installProceduralGenerators({ editor }));
+  const scene = safeInstall(editor, 'Scene controls', () => installSceneControls({ editor }));
 
   const previousSelectionHandler = editor.events.onSelection;
   editor.events.onSelection = (...args) => {
@@ -31,8 +41,8 @@ export function installFeatures({ editor, editMode, knifeTool, requestNumber }) 
     document.querySelectorAll('.workspace-tab').forEach((item) => item.classList.toggle('active', item === tab));
   });
 
-  const hardening = installRuntimeHardening({ editor, projects, editMode });
+  const hardening = safeInstall(editor, 'Runtime hardening', () => installRuntimeHardening({ editor, projects, editMode }));
   const installed = { uv, materials, projects, gameReady, paint, procedural, scene, hardening, resources };
-  const diagnostics = installDiagnostics({ editor, projects, features: installed });
+  const diagnostics = safeInstall(editor, 'Diagnostics', () => installDiagnostics({ editor, projects, features: installed }));
   return { ...installed, diagnostics };
 }
