@@ -15,6 +15,38 @@ export function unsupportedSimplifyAttributes(geometry) {
   return Object.keys(geometry?.attributes ?? {}).filter((name) => !SIMPLIFY_SAFE_ATTRIBUTES.has(name));
 }
 
+function groupPartitionIssue(mesh, total) {
+  const groups = mesh.geometry?.groups ?? [];
+  if (!groups.length) {
+    if (Array.isArray(mesh.material) && mesh.material.length > 1) {
+      return 'multi-material Mesh не содержит geometry groups';
+    }
+    return null;
+  }
+
+  const materialCount = Array.isArray(mesh.material) ? mesh.material.length : mesh.material ? 1 : 0;
+  const sorted = groups.map((group) => ({
+    start: Number(group.start ?? 0),
+    count: Number(group.count ?? 0),
+    materialIndex: Number(group.materialIndex ?? 0),
+  })).sort((a, b) => a.start - b.start);
+
+  let cursor = 0;
+  for (const group of sorted) {
+    if (![group.start, group.count, group.materialIndex].every(Number.isFinite)) return 'geometry groups содержат нечисловые значения';
+    if (![group.start, group.count, group.materialIndex].every(Number.isInteger)) return 'geometry groups должны иметь целые start/count/materialIndex';
+    if (group.start < 0 || group.count < 3 || group.start % 3 !== 0 || group.count % 3 !== 0) {
+      return 'geometry groups должны быть выровнены по треугольникам';
+    }
+    if (group.start !== cursor) return 'geometry groups должны без пропусков покрывать всю geometry';
+    if (group.start + group.count > total) return 'geometry group выходит за пределы geometry';
+    if (group.materialIndex < 0 || group.materialIndex >= materialCount) return `geometry group ссылается на отсутствующий material slot ${group.materialIndex}`;
+    cursor = group.start + group.count;
+  }
+  if (cursor !== total) return 'geometry groups должны полностью покрывать geometry';
+  return null;
+}
+
 export function simplifyCompatibilityIssue(mesh) {
   if (!mesh?.isMesh || mesh.isSkinnedMesh || mesh.isInstancedMesh || !mesh.geometry?.getAttribute('position')) {
     return mesh?.isInstancedMesh
@@ -31,7 +63,7 @@ export function simplifyCompatibilityIssue(mesh) {
   if (drawStart !== 0 || (Number.isFinite(drawCount) && drawCount < total)) {
     return 'нестандартный geometry.drawRange пока не поддерживается безопасным simplification pipeline';
   }
-  return null;
+  return groupPartitionIssue(mesh, total);
 }
 
 function cloneAttributeRange(attribute, start, count) {
@@ -80,14 +112,11 @@ function simplifyPart(source, ratio) {
 
 function normalizedGroups(geometry, totalCount) {
   if (!geometry.groups?.length) return [];
-  return geometry.groups
-    .map((group) => ({
-      start: Math.max(0, Math.floor(group.start ?? 0)),
-      count: Math.max(0, Math.min(Math.floor(group.count ?? 0), totalCount - Math.max(0, Math.floor(group.start ?? 0)))),
-      materialIndex: Math.max(0, Math.floor(group.materialIndex ?? 0)),
-    }))
-    .filter((group) => group.count >= 3)
-    .map((group) => ({ ...group, count: group.count - (group.count % 3) }));
+  return geometry.groups.map((group) => ({
+    start: group.start,
+    count: Math.min(group.count, totalCount - group.start),
+    materialIndex: group.materialIndex ?? 0,
+  }));
 }
 
 export function simplifyGeometryPreservingGroups(source, ratio = 0.5) {
