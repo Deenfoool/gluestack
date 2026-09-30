@@ -34,6 +34,13 @@ export function installProjects({ editor, editMode, knifeTool }) {
     if (editMode.active) editMode.exit();
   }
 
+  function resetHistory() {
+    editor.cancelHistory();
+    editor.clearHistoryStack(editor.undoStack);
+    editor.clearHistoryStack(editor.redoStack);
+    editor.emitHistory();
+  }
+
   async function run(action) {
     try {
       if (action === 'save') {
@@ -54,9 +61,11 @@ export function installProjects({ editor, editMode, knifeTool }) {
         if (!Number.isInteger(index) || !list[index]) throw new Error('Некорректный номер проекта');
         await leaveEdit();
         await projects.openLocal(list[index].id);
+        resetHistory();
       } else if (action === 'recover') {
         await leaveEdit();
         await projects.recoverAutosave();
+        resetHistory();
       }
     } catch (error) {
       console.error(error);
@@ -77,6 +86,7 @@ export function installProjects({ editor, editMode, knifeTool }) {
     try {
       await leaveEdit();
       await projects.openProjectBuffer(await file.arrayBuffer());
+      resetHistory();
     } catch (error) {
       console.error(error);
       editor.events.onStatus(`Open project: ${error.message || error}`);
