@@ -1,8 +1,8 @@
-import * as THREE from 'three';
 import { Editor3D } from './editor.js';
 import { EditModeController } from './edit/controller.js';
 import { KnifeTool } from './edit/knife-tool.js';
 import { ModifierController } from './modifiers/controller.js';
+import { bindModifierControls } from './modifiers/ui-bindings.js';
 import { TransformModal } from './transform-modal.js';
 import { bindKeyboard } from './keyboard.js';
 import { bevelFace } from './edit/bevel.js';
@@ -102,6 +102,7 @@ editMode = new EditModeController(editor, {
 });
 knifeTool = new KnifeTool(editor, editMode, setStatus);
 modifiers = new ModifierController(editor, setStatus);
+bindModifierControls(modifiers);
 
 const objectPointerHandler = editor.handlePointerUp.bind(editor);
 editor.handlePointerUp = (event) => {
@@ -131,11 +132,6 @@ function requestNumber(label, defaultValue, options = {}) {
   if (options.min !== undefined && value < options.min) return null;
   if (options.max !== undefined && value > options.max) return null;
   return value;
-}
-
-function inputNumber(selector, fallback = 0) {
-  const value = Number($(selector)?.value);
-  return Number.isFinite(value) ? value : fallback;
 }
 
 function setTransformMode(mode) {
@@ -266,26 +262,6 @@ $$('[data-property-tab]').forEach((button) => {
   });
 });
 
-$$('[data-modifier-mirror]').forEach((button) => {
-  button.addEventListener('click', () => modifiers.applyMirror(button.dataset.modifierMirror));
-});
-$('[data-modifier-array]').addEventListener('click', () => {
-  modifiers.applyArray(
-    inputNumber('#modifier-array-count', 2),
-    new THREE.Vector3(
-      inputNumber('#modifier-array-x', 2),
-      inputNumber('#modifier-array-y', 0),
-      inputNumber('#modifier-array-z', 0),
-    ),
-  );
-});
-$('[data-modifier-solidify]').addEventListener('click', () => {
-  modifiers.applySolidify(inputNumber('#modifier-solidify-thickness', 0.1));
-});
-$('[data-modifier-subdivision]').addEventListener('click', () => {
-  modifiers.applySubdivision(inputNumber('#modifier-subdivision-levels', 1));
-});
-
 const snapButton = $('[data-snap]');
 snapButton.addEventListener('click', () => {
   editor.setSnapEnabled(!editor.snapEnabled);
@@ -330,4 +306,4 @@ bindKeyboard({
 
 scheduleRefresh();
 refreshIcons();
-setStatus('Готово · Modifiers: Mirror / Array / Solidify / Subdivision · Tab Edit Mode');
+setStatus('Готово · Modifiers: Mirror / Array / Bevel / Solidify / Subdivision / Decimate / Boolean');
