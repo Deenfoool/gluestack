@@ -1,6 +1,8 @@
+import * as THREE from 'three';
 import { Editor3D } from './editor.js';
 import { EditModeController } from './edit/controller.js';
 import { KnifeTool } from './edit/knife-tool.js';
+import { ModifierController } from './modifiers/controller.js';
 import { TransformModal } from './transform-modal.js';
 import { bindKeyboard } from './keyboard.js';
 import { bevelFace } from './edit/bevel.js';
@@ -25,6 +27,7 @@ const elements = {
   statusMessage: $('#status-message'),
   sceneStats: $('#scene-stats'),
   objectProperties: $('#object-properties'),
+  modifierProperties: $('#modifier-properties'),
   emptyProperties: $('#empty-properties'),
   objectName: $('#object-name'),
   fileInput: $('#file-input'),
@@ -34,15 +37,26 @@ const elements = {
   objectMenu: $('#object-menu'),
   meshMenu: $('#mesh-menu'),
   buildLabel: $('.build-label'),
+  activePropertyTab: 'object',
 };
 
 let editor;
 let editMode;
 let knifeTool;
+let modifiers;
 let refreshQueued = false;
 let transformRefreshQueued = false;
 
 function setStatus(message) { elements.statusMessage.textContent = message; }
+
+function setPropertyTab(tab) {
+  if (tab === 'modifiers' && (!editor?.selected?.isMesh || editMode?.active)) tab = 'object';
+  elements.activePropertyTab = tab;
+  $$('[data-property-tab]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.propertyTab === tab);
+  });
+  scheduleRefresh();
+}
 
 function scheduleRefresh() {
   if (refreshQueued) return;
@@ -50,6 +64,12 @@ function scheduleRefresh() {
   requestAnimationFrame(() => {
     refreshQueued = false;
     if (!editor || !editMode) return;
+    if (elements.activePropertyTab === 'modifiers' && (!editor.selected?.isMesh || editMode.active)) {
+      elements.activePropertyTab = 'object';
+      $$('[data-property-tab]').forEach((button) => {
+        button.classList.toggle('active', button.dataset.propertyTab === 'object');
+      });
+    }
     renderOutliner(editor, editMode, elements.outliner);
     renderInspector(editor, editMode, elements);
     renderStats(editor, editMode, elements.sceneStats);
@@ -81,6 +101,7 @@ editMode = new EditModeController(editor, {
   onStatus: setStatus,
 });
 knifeTool = new KnifeTool(editor, editMode, setStatus);
+modifiers = new ModifierController(editor, setStatus);
 
 const objectPointerHandler = editor.handlePointerUp.bind(editor);
 editor.handlePointerUp = (event) => {
@@ -110,6 +131,11 @@ function requestNumber(label, defaultValue, options = {}) {
   if (options.min !== undefined && value < options.min) return null;
   if (options.max !== undefined && value > options.max) return null;
   return value;
+}
+
+function inputNumber(selector, fallback = 0) {
+  const value = Number($(selector)?.value);
+  return Number.isFinite(value) ? value : fallback;
 }
 
 function setTransformMode(mode) {
@@ -234,6 +260,31 @@ $$('[data-edit-select-mode]').forEach((button) => {
     editMode.setSelectionMode(button.dataset.editSelectMode);
   });
 });
+$$('[data-property-tab]').forEach((button) => {
+  button.addEventListener('click', () => {
+    if (!button.disabled) setPropertyTab(button.dataset.propertyTab);
+  });
+});
+
+$$('[data-modifier-mirror]').forEach((button) => {
+  button.addEventListener('click', () => modifiers.applyMirror(button.dataset.modifierMirror));
+});
+$('[data-modifier-array]').addEventListener('click', () => {
+  modifiers.applyArray(
+    inputNumber('#modifier-array-count', 2),
+    new THREE.Vector3(
+      inputNumber('#modifier-array-x', 2),
+      inputNumber('#modifier-array-y', 0),
+      inputNumber('#modifier-array-z', 0),
+    ),
+  );
+});
+$('[data-modifier-solidify]').addEventListener('click', () => {
+  modifiers.applySolidify(inputNumber('#modifier-solidify-thickness', 0.1));
+});
+$('[data-modifier-subdivision]').addEventListener('click', () => {
+  modifiers.applySubdivision(inputNumber('#modifier-subdivision-levels', 1));
+});
 
 const snapButton = $('[data-snap]');
 snapButton.addEventListener('click', () => {
@@ -279,4 +330,4 @@ bindKeyboard({
 
 scheduleRefresh();
 refreshIcons();
-setStatus('Готово · Tab Edit Mode · Ctrl+B Bevel · Ctrl+R Loop Cut · Ctrl+X Dissolve · K Knife');
+setStatus('Готово · Modifiers: Mirror / Array / Solidify / Subdivision · Tab Edit Mode');
