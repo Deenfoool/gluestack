@@ -10,6 +10,7 @@ import { installDiagnostics } from './runtime/diagnostics.js';
 import { installResourceOwnership } from './runtime/resource-ownership.js';
 import { installImportPipeline } from './runtime/importer.js';
 import { installDataIntegrity } from './runtime/data-integrity.js';
+import { installViewportHistory } from './runtime/viewport-history.js';
 
 function safeInstall(editor, name, factory) {
   try {
@@ -32,6 +33,7 @@ export function installFeatures({ editor, editMode, knifeTool, requestNumber }) 
   const paint = safeInstall(editor, 'Texture Paint', () => installTexturePaint({ editor, editMode, knifeTool }));
   const procedural = safeInstall(editor, 'Procedural', () => installProceduralGenerators({ editor }));
   const scene = safeInstall(editor, 'Scene controls', () => installSceneControls({ editor }));
+  const viewportHistory = safeInstall(editor, 'Viewport history', () => installViewportHistory(editor));
 
   const previousSelectionHandler = editor.events.onSelection;
   editor.events.onSelection = (...args) => {
@@ -46,7 +48,7 @@ export function installFeatures({ editor, editMode, knifeTool, requestNumber }) 
   });
 
   const hardening = safeInstall(editor, 'Runtime hardening', () => installRuntimeHardening({ editor, projects, editMode }));
-  const installed = { uv, materials, projects, gameReady, paint, procedural, scene, hardening, resources, importer, integrity };
+  const installed = { uv, materials, projects, gameReady, paint, procedural, scene, hardening, resources, importer, integrity, viewportHistory };
   const diagnostics = safeInstall(editor, 'Diagnostics', () => installDiagnostics({ editor, projects, features: installed }));
   return { ...installed, diagnostics };
 }
