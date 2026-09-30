@@ -31,6 +31,13 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     ({ installAnimationEditor }) => installAnimationEditor(editor),
   );
 
+  const dopeSheet = await loadAndInstall(
+    editor,
+    'Dope Sheet',
+    () => import('./runtime/dope-sheet.js'),
+    ({ installDopeSheet }) => installDopeSheet(editor),
+  );
+
   const importer = await loadAndInstall(
     editor,
     'GLTF importer',
@@ -146,6 +153,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     viewportHistory,
     animations,
     animationEditor,
+    dopeSheet,
     modifierStack,
   };
 
