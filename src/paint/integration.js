@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { refreshIcons } from '../ui.js';
 import { disposeTextureIfUnreferenced } from '../runtime/resource-ownership.js';
 
-function getMaterial(mesh) {
-  const material = Array.isArray(mesh?.material) ? mesh.material[0] : mesh?.material;
+function getMaterial(mesh, slot = 0) {
+  const material = Array.isArray(mesh?.material) ? mesh.material[slot] : mesh?.material;
   return material?.isMeshStandardMaterial ? material : null;
 }
 
@@ -55,7 +55,7 @@ function paintTextureFromCanvas(canvas, source) {
   return copyTextureSettings(new THREE.CanvasTexture(canvas), source);
 }
 
-export function installTexturePaint({ editor, editMode, knifeTool }) {
+export function installTexturePaint({ editor, editMode, knifeTool, materials = null }) {
   const tabs = document.querySelector('.workspace-tabs');
   const viewport = document.querySelector('#viewport');
   if (!tabs || !viewport) return null;
@@ -73,21 +73,23 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
   panel.hidden = true;
   panel.innerHTML = `
     <div class="paint-panel-title"><i data-lucide="brush"></i><span>Texture Paint</span></div>
+    <div class="paint-slot" data-paint-slot>Material slot 1</div>
     <label><span>Color</span><input data-paint="color" type="color" value="#d26a36" /></label>
     <label><span>Size</span><input data-paint="size" type="range" min="2" max="160" step="1" value="36" /></label>
     <label><span>Strength</span><input data-paint="strength" type="range" min="0.05" max="1" step="0.05" value="1" /></label>
-    <button type="button" data-paint-action="clear"><i data-lucide="eraser"></i><span>Fill White</span></button>`;
+    <button type="button" data-paint-action="clear"><i data-lucide="eraser"></i><span>Fill Slot White</span></button>`;
   viewport.appendChild(panel);
 
   const style = document.createElement('style');
   style.textContent = `
-    .paint-panel{position:absolute;z-index:14;top:10px;left:10px;width:205px;padding:9px;background:rgba(35,35,35,.96);border:1px solid #555;border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,.3)}.paint-panel-title{display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:8px}.paint-panel label{display:grid;grid-template-columns:60px 1fr;align-items:center;gap:6px;margin:6px 0}.paint-panel input[type=color]{width:100%;height:25px;background:#1f1f1f;border:1px solid #4a4a4a}.paint-panel input[type=range]{width:100%}.paint-panel button{width:100%;min-height:28px;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;border:1px solid #494949;border-radius:3px;background:#303030;color:#ddd}.paint-panel button:hover{background:#454545}`;
+    .paint-panel{position:absolute;z-index:14;top:10px;left:10px;width:215px;padding:9px;background:rgba(35,35,35,.96);border:1px solid #555;border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,.3)}.paint-panel-title{display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:5px}.paint-slot{color:#aaa;font-size:11px;margin-bottom:8px}.paint-panel label{display:grid;grid-template-columns:60px 1fr;align-items:center;gap:6px;margin:6px 0}.paint-panel input[type=color]{width:100%;height:25px;background:#1f1f1f;border:1px solid #4a4a4a}.paint-panel input[type=range]{width:100%}.paint-panel button{width:100%;min-height:28px;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;border:1px solid #494949;border-radius:3px;background:#303030;color:#ddd}.paint-panel button:hover{background:#454545}`;
   document.head.appendChild(style);
 
   let active = false;
   let painting = false;
   let mesh = null;
   let material = null;
+  let materialSlot = 0;
   let paintCanvas = null;
   let paintCtx = null;
   let texture = null;
@@ -102,12 +104,15 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
       editor.events.onStatus('Texture Paint: у Mesh нет UV — сначала откройте UV Editing');
       return false;
     }
-    material = getMaterial(mesh);
+    const slotCount = Array.isArray(mesh.material) ? mesh.material.length : mesh.material ? 1 : 0;
+    materialSlot = Math.max(0, Math.min(materials?.selectedSlot ?? 0, Math.max(0, slotCount - 1)));
+    material = getMaterial(mesh, materialSlot);
     if (!material) {
-      editor.events.onStatus('Texture Paint: нужен PBR материал MeshStandardMaterial');
+      editor.events.onStatus(`Texture Paint: material slot ${materialSlot + 1} должен быть MeshStandardMaterial`);
       return false;
     }
-    editor.checkpoint('Prepare texture paint');
+    panel.querySelector('[data-paint-slot]').textContent = `Material slot ${materialSlot + 1}${material.name ? ` · ${material.name}` : ''}`;
+    editor.checkpoint(`Prepare texture paint · slot ${materialSlot + 1}`);
     const old = material.map;
     paintCanvas = canvasFromTexture(old, 1024);
     paintCtx = paintCanvas.getContext('2d', { willReadFrequently: true });
@@ -115,7 +120,7 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
     material.map = texture;
     material.needsUpdate = true;
     disposeTextureIfUnreferenced(editor, old);
-    window.dispatchEvent(new CustomEvent('gluestack:texture-changed', { detail: { mesh, texture, key: 'map' } }));
+    window.dispatchEvent(new CustomEvent('gluestack:texture-changed', { detail: { mesh, texture, key: 'map', slot: materialSlot } }));
     return true;
   }
 
@@ -129,7 +134,7 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
     active = true;
     panel.hidden = false;
     editor.transform.detach();
-    editor.events.onStatus('Texture Paint · ЛКМ рисовать · MMB навигация');
+    editor.events.onStatus(`Texture Paint · slot ${materialSlot + 1} · ЛКМ рисовать · MMB навигация`);
     refreshIcons();
     return true;
   }
@@ -156,6 +161,11 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
     return next;
   }
 
+  function hitMatchesSlot(hit) {
+    if (!Array.isArray(mesh?.material)) return true;
+    return (hit?.face?.materialIndex ?? 0) === materialSlot;
+  }
+
   function paintAt(event) {
     if (!active || !painting || !mesh || !paintCtx) return;
     const rect = editor.renderer.domElement.getBoundingClientRect();
@@ -163,7 +173,7 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
     editor.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     editor.raycaster.setFromCamera(editor.pointer, editor.camera);
     const hit = editor.raycaster.intersectObject(mesh, false)[0];
-    if (!hit?.uv) return;
+    if (!hit?.uv || !hitMatchesSlot(hit)) return;
     const uv = transformedUV(hit.uv);
     const x = uv.x * paintCanvas.width;
     const y = (1 - uv.y) * paintCanvas.height;
@@ -189,7 +199,7 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
     if (!active || event.button !== 0) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    editor.beginHistory('Texture paint stroke');
+    editor.beginHistory(`Texture paint stroke · slot ${materialSlot + 1}`);
     painting = true;
     editor.orbit.enabled = false;
     paintAt(event);
@@ -205,16 +215,16 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
     painting = false;
     editor.orbit.enabled = true;
     editor.commitHistory();
-    window.dispatchEvent(new CustomEvent('gluestack:texture-changed', { detail: { mesh, texture, key: 'map' } }));
+    window.dispatchEvent(new CustomEvent('gluestack:texture-changed', { detail: { mesh, texture, key: 'map', slot: materialSlot } }));
   }, true);
 
   panel.querySelector('[data-paint-action="clear"]').addEventListener('click', () => {
     if (!paintCtx) return;
-    editor.checkpoint('Texture paint fill');
+    editor.checkpoint(`Texture paint fill · slot ${materialSlot + 1}`);
     paintCtx.fillStyle = '#ffffff';
     paintCtx.fillRect(0, 0, paintCanvas.width, paintCanvas.height);
     texture.needsUpdate = true;
-    window.dispatchEvent(new CustomEvent('gluestack:texture-changed', { detail: { mesh, texture, key: 'map' } }));
+    window.dispatchEvent(new CustomEvent('gluestack:texture-changed', { detail: { mesh, texture, key: 'map', slot: materialSlot } }));
   });
 
   const previousSelection = editor.events.onSelection;
@@ -227,5 +237,5 @@ export function installTexturePaint({ editor, editMode, knifeTool }) {
   };
 
   refreshIcons();
-  return { tab, panel, enter, leave, get active() { return active; } };
+  return { tab, panel, enter, leave, get active() { return active; }, get materialSlot() { return materialSlot; } };
 }
