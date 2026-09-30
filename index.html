@@ -70,17 +70,32 @@
         </div>
       </details>
 
+      <details class="menu" id="mesh-menu" hidden>
+        <summary>Mesh</summary>
+        <div class="menu-popover wide-menu">
+          <button type="button" data-action="edit-extrude"><i data-lucide="move-3d"></i><span>Extrude Faces</span><kbd>E</kbd></button>
+          <button type="button" data-action="edit-inset"><i data-lucide="shrink"></i><span>Inset Face</span><kbd>I</kbd></button>
+          <button type="button" data-action="edit-merge"><i data-lucide="merge"></i><span>Merge at Center</span><kbd>M</kbd></button>
+          <button type="button" data-action="edit-fill"><i data-lucide="square-dashed"></i><span>Fill Edge Loop</span><kbd>F</kbd></button>
+          <div class="menu-separator"></div>
+          <button type="button" data-action="edit-recalculate-normals"><i data-lucide="refresh-cw"></i><span>Recalculate Normals</span><kbd>Shift N</kbd></button>
+          <button type="button" data-action="edit-flip-normals"><i data-lucide="flip-horizontal-2"></i><span>Flip Normals</span></button>
+          <div class="menu-separator"></div>
+          <button type="button" data-action="edit-delete"><i data-lucide="trash-2"></i><span>Delete Selected</span><kbd>X</kbd></button>
+        </div>
+      </details>
+
       <div class="main-menu-spacer"></div>
       <div class="header-actions" aria-label="History">
         <button type="button" class="header-action" data-history="undo" title="Undo (Ctrl+Z)"><i data-lucide="undo-2"></i></button>
         <button type="button" class="header-action" data-history="redo" title="Redo (Ctrl+Shift+Z)"><i data-lucide="redo-2"></i></button>
       </div>
-      <span class="build-label">Object Mode · v0.2</span>
+      <span class="build-label">Object Mode · v0.3</span>
     </header>
 
     <nav class="workspace-tabs" aria-label="Workspaces">
-      <button type="button" class="workspace-tab active">Layout</button>
-      <button type="button" class="workspace-tab">Modeling</button>
+      <button type="button" class="workspace-tab active" data-workspace="layout">Layout</button>
+      <button type="button" class="workspace-tab" data-workspace="modeling">Modeling</button>
       <button type="button" class="workspace-tab" disabled title="По roadmap">UV Editing</button>
       <button type="button" class="workspace-tab" disabled title="По roadmap">Shading</button>
       <div class="workspace-spacer"></div>
@@ -93,16 +108,29 @@
         <button type="button" class="tool-button" data-transform-mode="rotate" title="Rotate (R)"><i data-lucide="rotate-cw"></i></button>
         <button type="button" class="tool-button" data-transform-mode="scale" title="Scale (S)"><i data-lucide="maximize-2"></i></button>
         <div class="toolbar-separator"></div>
-        <button type="button" class="tool-button" data-action="duplicate" title="Duplicate (Shift+D)"><i data-lucide="copy"></i></button>
+        <button type="button" class="tool-button object-only" data-action="duplicate" title="Duplicate (Shift+D)"><i data-lucide="copy"></i></button>
         <button type="button" class="tool-button" data-snap aria-pressed="false" title="Snap (Shift+Tab)"><i data-lucide="magnet"></i></button>
-        <div class="toolbar-separator"></div>
-        <button type="button" class="tool-button danger" data-action="delete" title="Delete (X)"><i data-lucide="trash-2"></i></button>
+        <div class="toolbar-separator object-only"></div>
+        <button type="button" class="tool-button danger object-only" data-action="delete" title="Delete (X)"><i data-lucide="trash-2"></i></button>
+
+        <div class="toolbar-separator edit-only" hidden></div>
+        <button type="button" class="tool-button edit-only" data-action="edit-extrude" title="Extrude Faces (E)" hidden><i data-lucide="move-3d"></i></button>
+        <button type="button" class="tool-button edit-only" data-action="edit-inset" title="Inset Face (I)" hidden><i data-lucide="shrink"></i></button>
+        <button type="button" class="tool-button edit-only" data-action="edit-merge" title="Merge at Center (M)" hidden><i data-lucide="merge"></i></button>
+        <button type="button" class="tool-button edit-only" data-action="edit-fill" title="Fill Edge Loop (F)" hidden><i data-lucide="square-dashed"></i></button>
+        <button type="button" class="tool-button danger edit-only" data-action="edit-delete" title="Delete Selected (X)" hidden><i data-lucide="trash-2"></i></button>
       </aside>
 
       <section class="viewport-panel">
         <div class="viewport-header">
-          <div class="mode-chip">Object Mode</div>
-          <span class="viewport-hint">Shift+Click multi-select · MMB orbit · Shift+MMB pan · Wheel zoom</span>
+          <button type="button" id="mode-toggle" class="mode-chip" data-action="toggle-mode" title="Toggle Object/Edit Mode (Tab)">Object Mode</button>
+          <div id="edit-select-modes" class="edit-select-modes" hidden>
+            <button type="button" class="selection-mode-button active" data-edit-select-mode="vertex" title="Vertex Select (1)"><i data-lucide="circle-dot"></i></button>
+            <button type="button" class="selection-mode-button" data-edit-select-mode="edge" title="Edge Select (2)"><i data-lucide="minus"></i></button>
+            <button type="button" class="selection-mode-button" data-edit-select-mode="face" title="Face Select (3)"><i data-lucide="square"></i></button>
+          </div>
+          <span class="viewport-hint object-only">Shift+Click multi-select · MMB orbit · Shift+MMB pan · Wheel zoom</span>
+          <span class="viewport-hint edit-only" hidden>1/2/3 Vertex/Edge/Face · Shift+Click multi-select · Tab Object Mode</span>
           <div class="viewport-header-spacer"></div>
           <button type="button" class="header-icon active" title="Solid"><i data-lucide="circle"></i></button>
           <button type="button" class="header-icon" disabled title="Material Preview — по roadmap"><i data-lucide="circle-dot"></i></button>
@@ -117,7 +145,7 @@
           <div class="panel-header">
             <span>Scene Collection</span>
             <div class="panel-header-spacer"></div>
-            <button type="button" class="panel-icon" data-action="collection" title="New Collection"><i data-lucide="folder-plus"></i></button>
+            <button type="button" class="panel-icon object-only" data-action="collection" title="New Collection"><i data-lucide="folder-plus"></i></button>
           </div>
           <div id="outliner" class="outliner" aria-label="Outliner"></div>
         </section>
