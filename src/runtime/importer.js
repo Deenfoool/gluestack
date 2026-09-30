@@ -40,6 +40,12 @@ function uniqueMissing(map, uris) {
   return [...new Set(uris.filter((uri) => !resolveFile(map, uri)))];
 }
 
+function assertStaticGltf(gltf) {
+  if (gltf?.animations?.length) {
+    throw new Error(`Анимированный glTF пока не импортируется: найдено animation clips ${gltf.animations.length}. Это блокируется, чтобы экспорт не потерял анимацию.`);
+  }
+}
+
 function isolateEditableResources(root) {
   root?.traverse?.((object) => {
     if (!object.isMesh || object.isSkinnedMesh) return;
@@ -88,6 +94,7 @@ async function parseWithResolver(editor, payload, fileMap, label) {
 
   try {
     const gltf = await parseGltf(editor, payload);
+    assertStaticGltf(gltf);
     return addImportedScene(editor, gltf.scene, label);
   } finally {
     manager.setURLModifier(undefined);
@@ -124,6 +131,7 @@ export function installImportPipeline({ editor, editMode, knifeTool }) {
       if (/\.glb$/i.test(primary.name)) {
         const payload = await primary.arrayBuffer();
         const gltf = await parseGltf(editor, payload);
+        assertStaticGltf(gltf);
         addImportedScene(editor, gltf.scene, primary.name.replace(/\.glb$/i, ''));
         return;
       }
