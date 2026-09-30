@@ -63,9 +63,11 @@ UV Editing работает непосредственно с `geometry.attribut
 Материал редактируется непосредственно на Mesh, поэтому параметры и карты передаются существующему `GLTFExporter`. Для multi-material Mesh на текущем этапе Material Properties редактирует первый material slot.
 
 ## Этап 6 — проекты
-- [ ] Локальные проекты через IndexedDB.
-- [ ] Autosave и восстановление сессии.
-- [ ] Собственный формат проекта без потери редакторских данных.
+- [x] Локальные именованные проекты через IndexedDB.
+- [x] Debounced autosave и восстановление последней сессии.
+- [x] Собственный бинарный `.gluestack`: GLB + редакторские метаданные (камера, selection, snap, userData/extras).
+
+Один и тот же project container используется для скачиваемого файла и IndexedDB, поэтому локальный snapshot и файл проекта не расходятся по формату. Текстуры хранятся внутри вложенного GLB.
 
 ## Этап 7 — Game Ready
 - [ ] Статистика vertices / triangles / materials / textures.
