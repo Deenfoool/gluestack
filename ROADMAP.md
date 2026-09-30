@@ -9,21 +9,26 @@
 - [x] Выбор объектов и Move / Rotate / Scale gizmo.
 - [x] Создание базовых примитивов.
 - [x] Импорт `.glb/.gltf` и экспорт `.glb`.
-- [x] Lucide icons.
 
 ## Этап 1 — Object Mode
 - [x] Undo / Redo с общей историей операций.
 - [x] Collections, parenting и иерархия Outliner.
-- [x] Multi-select, Duplicate, Join, Separate Group, Apply Transform, Origin/Pivot.
-- [x] Blender-подобный числовой ввод `G X 2`, `R Z 90`, `S 2`.
-- [x] Базовый snapping для TransformControls.
+- [x] Duplicate, Join, Separate, Apply Transform, Origin/Pivot.
+- [x] Blender-подобный ввод `G X 2`, `R Z 90`, `S 2`.
+- [x] Базовый snapping к сетке.
 
 ## Этап 2 — Edit Mode
-- [ ] Выбор Vertex / Edge / Face.
-- [ ] Extrude, Inset, Bevel, Merge, Fill, Dissolve.
-- [ ] Loop Cut и Knife.
-- [ ] Recalculate / Flip Normals.
-- [ ] Корректное редактирование индексированной mesh-топологии.
+- [x] Переключение Object / Edit через `Tab`.
+- [x] Vertex / Edge / Face selection (`1 / 2 / 3`) и multi-select.
+- [x] `G / R / S` для выбранных компонентов и transform gizmo.
+- [x] Работа с indexed и non-indexed mesh через логические сваренные вершины без разрушения существующих UV-швов при обычном transform.
+- [x] Extrude Faces, Inset Face, Merge at Center, Fill Edge Loop.
+- [x] Delete Vertex / Edge / Face с пересборкой валидной геометрии.
+- [x] Recalculate / Flip Normals.
+- [ ] Bevel и Dissolve.
+- [ ] Loop Cut.
+- [ ] Knife.
+- [ ] Улучшить операции topology-editing с сохранением дополнительных custom vertex attributes импортированных GLB.
 
 ## Этап 3 — Modifiers
 - [ ] Mirror.
