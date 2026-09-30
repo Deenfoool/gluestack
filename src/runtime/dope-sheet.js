@@ -194,7 +194,8 @@ export function installDopeSheet(editor) {
   }
 
   function renderClips() {
-    const previous = clipIndex();
+    const previousClip = clipIndex();
+    const previousSelection = selected ? { ...selected } : null;
     clipSelect.replaceChildren();
     (editor.animations ?? []).forEach((item, index) => {
       const option = document.createElement('option');
@@ -203,9 +204,23 @@ export function installDopeSheet(editor) {
       clipSelect.appendChild(option);
     });
     clipSelect.disabled = !editor.animations?.length;
-    if (editor.animations?.length) clipSelect.value = String(Math.min(previous, editor.animations.length - 1));
-    selected = null;
-    deleteButton.disabled = true;
+    if (editor.animations?.length) clipSelect.value = String(Math.min(previousClip, editor.animations.length - 1));
+
+    if (previousSelection) {
+      const track = clip()?.tracks?.[previousSelection.trackIndex];
+      if (track && previousSelection.keyIndex < track.times.length) selected = previousSelection;
+      else selected = null;
+    }
+    deleteButton.disabled = !selected;
+    if (!selected) selectionLabel.textContent = 'No key selected';
+    else {
+      const track = clip()?.tracks?.[selected.trackIndex];
+      if (track) {
+        currentTime = Number(track.times[selected.keyIndex]);
+        selectionLabel.textContent = `${track.name} · ${currentTime.toFixed(2)}s · [${keyValueSummary(track, selected.keyIndex)}]`;
+        interpolation.value = interpolationName(track);
+      }
+    }
     setTime(Math.min(currentTime, duration()), false);
     renderRows();
   }
@@ -217,7 +232,7 @@ export function installDopeSheet(editor) {
     const entries = trackEntries(track);
     const entry = entries[selected.keyIndex];
     if (!entry) return false;
-    entry.time = THREE.MathUtils.clamp(Number(nextTime) || 0, 0, Math.max(duration(), Number(nextTime) || 0));
+    entry.time = Math.max(0, Number(nextTime) || 0);
     entries.sort((a, b) => a.time - b.time);
     const newIndex = entries.indexOf(entry);
     activeClip.tracks[selected.trackIndex] = cloneTrackWithKeys(track, entries);
@@ -278,7 +293,7 @@ export function installDopeSheet(editor) {
       if (moveSelectedKey(requested)) {
         emitChanged();
         renderRows();
-        selectKey(selected.trackIndex, selected.keyIndex);
+        if (selected) selectKey(selected.trackIndex, selected.keyIndex);
       }
     } else setTime(requested, true);
   });
@@ -310,11 +325,12 @@ export function installDopeSheet(editor) {
   window.addEventListener('pointerup', () => {
     if (!dragging) return;
     const changed = dragging.checkpointed;
+    const keepSelection = selected ? { ...selected } : null;
     dragging = null;
     if (changed) {
       emitChanged();
       renderRows();
-      if (selected) selectKey(selected.trackIndex, selected.keyIndex);
+      if (keepSelection) selectKey(keepSelection.trackIndex, keepSelection.keyIndex);
     }
   }, true);
 
