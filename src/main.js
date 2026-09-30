@@ -46,7 +46,6 @@ let knifeTool;
 let modifiers;
 let refreshQueued = false;
 let transformRefreshQueued = false;
-let featureBootstrapError = null;
 
 function setStatus(message) { elements.statusMessage.textContent = message; }
 
@@ -135,18 +134,26 @@ function requestNumber(label, defaultValue, options = {}) {
   return value;
 }
 
-let features = {};
-try {
-  const { installFeatures } = await import('./features.js');
-  features = installFeatures({ editor, editMode, knifeTool, requestNumber }) ?? {};
-} catch (error) {
-  featureBootstrapError = error instanceof Error ? error : new Error(String(error));
-  console.error('[gluestack] optional feature bundle failed to load', featureBootstrapError);
-  setStatus(`Optional features не загрузились: ${featureBootstrapError.message}`);
-}
 window.__gluestackEditor = editor;
-window.__gluestackFeatures = features;
-window.__gluestackFeatureBootstrapError = featureBootstrapError;
+window.__gluestackFeatures = {};
+window.__gluestackFeatureBootstrapError = null;
+
+async function bootstrapOptionalFeatures() {
+  try {
+    const { installFeatures } = await import('./features.js');
+    const features = installFeatures({ editor, editMode, knifeTool, requestNumber }) ?? {};
+    window.__gluestackFeatures = features;
+    window.__gluestackFeatureBootstrapError = null;
+    scheduleRefresh();
+    return features;
+  } catch (error) {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    window.__gluestackFeatureBootstrapError = failure;
+    console.error('[gluestack] optional feature bundle failed to load', failure);
+    setStatus(`Базовый редактор работает · Optional features error: ${failure.message}`);
+    return {};
+  }
+}
 
 function setTransformMode(mode) {
   editor.setTransformMode(mode);
@@ -320,8 +327,5 @@ bindKeyboard({
 
 scheduleRefresh();
 refreshIcons();
-if (featureBootstrapError) {
-  setStatus(`Базовый редактор готов · Optional features error: ${featureBootstrapError.message}`);
-} else {
-  setStatus('Готово · Modifiers: Mirror / Array / Bevel / Solidify / Subdivision / Decimate / Boolean');
-}
+setStatus('Готово · базовый редактор запущен · подключаем дополнительные модули…');
+window.__gluestackFeatureBootstrapPromise = bootstrapOptionalFeatures();
