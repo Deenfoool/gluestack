@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { refreshIcons } from '../ui.js';
 
+const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap'];
+
 function result(name, ok, detail = '', level = ok ? 'pass' : 'fail') {
   return { name, ok, detail, level };
 }
@@ -9,6 +11,62 @@ function countMeshes(root) {
   let count = 0;
   root?.traverse?.((object) => { if (object.isMesh) count += 1; });
   return count;
+}
+
+function sceneSignature(root) {
+  const textures = new Set();
+  const signature = {
+    meshes: 0,
+    uvMeshes: 0,
+    materialSlots: 0,
+    pbrMaterials: 0,
+    textureSlots: 0,
+    extrasObjects: 0,
+  };
+
+  root?.traverse?.((object) => {
+    if (object.userData && Object.keys(object.userData).length) signature.extrasObjects += 1;
+    if (!object.isMesh) return;
+    signature.meshes += 1;
+    const position = object.geometry?.getAttribute('position');
+    const uv = object.geometry?.getAttribute('uv');
+    if (position && uv && uv.count === position.count) signature.uvMeshes += 1;
+
+    const materials = Array.isArray(object.material) ? object.material.filter(Boolean) : object.material ? [object.material] : [];
+    signature.materialSlots += materials.length;
+    for (const material of materials) {
+      if (material.isMeshStandardMaterial || material.isMeshPhysicalMaterial) signature.pbrMaterials += 1;
+      for (const slot of TEXTURE_SLOTS) {
+        const texture = material[slot];
+        if (!texture?.isTexture) continue;
+        signature.textureSlots += 1;
+        textures.add(texture.uuid);
+      }
+    }
+  });
+
+  signature.uniqueTextures = textures.size;
+  return signature;
+}
+
+function signatureDetail(before, after) {
+  return [
+    `mesh ${before.meshes}→${after.meshes}`,
+    `UV ${before.uvMeshes}→${after.uvMeshes}`,
+    `PBR ${before.pbrMaterials}→${after.pbrMaterials}`,
+    `texture slots ${before.textureSlots}→${after.textureSlots}`,
+    `extras ${before.extrasObjects}→${after.extrasObjects}`,
+  ].join(' · ');
+}
+
+function signatureMatches(before, after) {
+  return before.meshes === after.meshes
+    && before.uvMeshes === after.uvMeshes
+    && before.materialSlots === after.materialSlots
+    && before.pbrMaterials === after.pbrMaterials
+    && before.textureSlots === after.textureSlots
+    && before.uniqueTextures === after.uniqueTextures
+    && before.extrasObjects === after.extrasObjects;
 }
 
 async function exportBuffer(editor) {
@@ -77,7 +135,7 @@ export function installDiagnostics({ editor, projects, features = {} }) {
     checks.push(result('Renderer', Boolean(editor.renderer?.domElement?.isConnected), editor.renderer?.domElement?.isConnected ? 'WebGL canvas connected' : 'Renderer canvas missing'));
     checks.push(result('Scene root', Boolean(editor.modelRoot?.parent), `${editor.modelRoot?.children?.length ?? 0} top-level object(s)`));
 
-    const requiredFeatures = ['uv', 'materials', 'projects', 'gameReady', 'paint', 'procedural', 'scene'];
+    const requiredFeatures = ['resources', 'importer', 'uv', 'materials', 'projects', 'gameReady', 'integrity', 'paint', 'procedural', 'scene', 'hardening'];
     for (const key of requiredFeatures) {
       checks.push(result(`Feature: ${key}`, Boolean(features[key]), features[key] ? 'installed' : 'not installed'));
     }
@@ -93,13 +151,15 @@ export function installDiagnostics({ editor, projects, features = {} }) {
     }
 
     try {
+      const before = sceneSignature(editor.modelRoot);
       const buffer = await exportBuffer(editor);
       const gltf = await parseBuffer(editor, buffer);
-      const before = countMeshes(editor.modelRoot);
-      const after = countMeshes(gltf.scene);
-      checks.push(result('GLB export → parse', after === before, `${buffer.byteLength.toLocaleString()} bytes · meshes ${before} → ${after}`, after === before ? 'pass' : 'fail'));
+      const after = sceneSignature(gltf.scene);
+      checks.push(result('GLB export → parse', after.meshes === before.meshes, `${buffer.byteLength.toLocaleString()} bytes · meshes ${before.meshes} → ${after.meshes}`, after.meshes === before.meshes ? 'pass' : 'fail'));
+      checks.push(result('GLB data round-trip', signatureMatches(before, after), signatureDetail(before, after), signatureMatches(before, after) ? 'pass' : 'fail'));
     } catch (error) {
       checks.push(result('GLB export → parse', false, error.message || String(error)));
+      checks.push(result('GLB data round-trip', false, 'Export/parse did not complete'));
     }
 
     if (projects) {
@@ -113,10 +173,21 @@ export function installDiagnostics({ editor, projects, features = {} }) {
       try {
         const buffer = await projects.encodeProject();
         const decoded = projects.decodeProject(buffer);
-        const valid = decoded.metadata?.format === 'gluestack-project' && decoded.glb?.byteLength > 20;
-        checks.push(result('.gluestack encode/decode', valid, `v${decoded.metadata?.version ?? '?'} · ${buffer.byteLength.toLocaleString()} bytes`));
+        const metadata = decoded.metadata ?? {};
+        const baseValid = metadata.format === 'gluestack-project' && decoded.glb?.byteLength > 20;
+        const metadataValid = Boolean(
+          metadata.camera
+          && metadata.selection
+          && metadata.editor
+          && metadata.viewport
+          && Number.isFinite(metadata.camera.fov)
+          && typeof metadata.editor.snapEnabled === 'boolean'
+        );
+        checks.push(result('.gluestack encode/decode', baseValid, `v${metadata.version ?? '?'} · ${buffer.byteLength.toLocaleString()} bytes`));
+        checks.push(result('.gluestack editor metadata', metadataValid, metadataValid ? 'camera · selection · editor · viewport present' : 'missing editor metadata'));
       } catch (error) {
         checks.push(result('.gluestack encode/decode', false, error.message || String(error)));
+        checks.push(result('.gluestack editor metadata', false, 'encode/decode did not complete'));
       }
     }
 
