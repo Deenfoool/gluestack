@@ -7,9 +7,19 @@ function inputNumber(root, selector, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function stackAdd(modifiers, type, params, fallback) {
+  if (modifiers.stack?.add) return modifiers.stack.add(type, params);
+  return fallback();
+}
+
 let booleanModulePromise = null;
 
 async function runBoolean(modifiers, operation) {
+  const selected = modifiers.editor.getTopLevelSelection?.() ?? [];
+  if (modifiers.stack?.hasStack && selected.some((mesh) => modifiers.stack.hasStack(mesh))) {
+    modifiers.onStatus('Boolean: сначала Apply Stack или Clear Stack на выбранных Mesh');
+    return false;
+  }
   try {
     booleanModulePromise ??= import('./boolean.js');
     const { applyBoolean } = await booleanModulePromise;
@@ -24,38 +34,50 @@ async function runBoolean(modifiers, operation) {
 
 export function bindModifierControls(modifiers, root = document) {
   root.querySelectorAll('[data-modifier-mirror]').forEach((button) => {
-    button.addEventListener('click', () => modifiers.applyMirror(button.dataset.modifierMirror));
+    button.addEventListener('click', () => stackAdd(
+      modifiers,
+      'mirror',
+      { axis: button.dataset.modifierMirror },
+      () => modifiers.applyMirror(button.dataset.modifierMirror),
+    ));
   });
 
   root.querySelector('[data-modifier-array]')?.addEventListener('click', () => {
-    modifiers.applyArray(
-      inputNumber(root, '#modifier-array-count', 2),
-      new THREE.Vector3(
-        inputNumber(root, '#modifier-array-x', 2),
-        inputNumber(root, '#modifier-array-y', 0),
-        inputNumber(root, '#modifier-array-z', 0),
-      ),
+    const count = inputNumber(root, '#modifier-array-count', 2);
+    const x = inputNumber(root, '#modifier-array-x', 2);
+    const y = inputNumber(root, '#modifier-array-y', 0);
+    const z = inputNumber(root, '#modifier-array-z', 0);
+    stackAdd(
+      modifiers,
+      'array',
+      { count, x, y, z },
+      () => modifiers.applyArray(count, new THREE.Vector3(x, y, z)),
     );
   });
 
   root.querySelector('[data-modifier-solidify]')?.addEventListener('click', () => {
-    modifiers.applySolidify(inputNumber(root, '#modifier-solidify-thickness', 0.1));
+    const thickness = inputNumber(root, '#modifier-solidify-thickness', 0.1);
+    stackAdd(modifiers, 'solidify', { thickness }, () => modifiers.applySolidify(thickness));
   });
 
   root.querySelector('[data-modifier-subdivision]')?.addEventListener('click', () => {
-    modifiers.applySubdivision(inputNumber(root, '#modifier-subdivision-levels', 1));
+    const levels = inputNumber(root, '#modifier-subdivision-levels', 1);
+    stackAdd(modifiers, 'subdivision', { levels }, () => modifiers.applySubdivision(levels));
   });
 
   root.querySelector('[data-modifier-bevel]')?.addEventListener('click', () => {
-    applyBevelModifier(modifiers, inputNumber(root, '#modifier-bevel-factor', 0.08));
+    const factor = inputNumber(root, '#modifier-bevel-factor', 0.08);
+    stackAdd(modifiers, 'bevel', { factor }, () => applyBevelModifier(modifiers, factor));
   });
 
   root.querySelector('[data-modifier-decimate]')?.addEventListener('click', async () => {
-    await applyDecimate(modifiers, inputNumber(root, '#modifier-decimate-ratio', 0.5));
+    const ratio = inputNumber(root, '#modifier-decimate-ratio', 0.5);
+    if (modifiers.stack?.add) modifiers.stack.add('decimate', { ratio });
+    else await applyDecimate(modifiers, ratio);
   });
 
   root.querySelector('[data-modifier-triangulate]')?.addEventListener('click', () => {
-    applyTriangulate(modifiers);
+    stackAdd(modifiers, 'triangulate', {}, () => applyTriangulate(modifiers));
   });
 
   root.querySelectorAll('[data-modifier-boolean]').forEach((button) => {
