@@ -17,6 +17,10 @@ export function installDataIntegrity({ editor, editMode, gameReady }) {
   if (editMode?.enter) {
     const originalEnter = editMode.enter.bind(editMode);
     editMode.enter = (mesh = editor.selected) => {
+      if (mesh?.isInstancedMesh) {
+        editor.events.onStatus('Edit Mode отменён: InstancedMesh требует отдельного instance-aware editor');
+        return false;
+      }
       if (morphData(mesh)) {
         editor.events.onStatus('Edit Mode отменён: morph targets пока не поддерживаются без потери данных');
         return false;
@@ -28,6 +32,10 @@ export function installDataIntegrity({ editor, editMode, gameReady }) {
   const originalJoin = editor.joinSelected.bind(editor);
   editor.joinSelected = () => {
     const meshes = editor.getTopLevelSelection().filter((object) => object.isMesh && !object.isSkinnedMesh);
+    if (meshes.some((mesh) => mesh.isInstancedMesh)) {
+      editor.events.onStatus('Join отменён: InstancedMesh нельзя объединять обычным mesh pipeline');
+      return false;
+    }
     const extras = [...new Set(meshes.flatMap((mesh) => extraAttributes(mesh, JOIN_SAFE_ATTRIBUTES)))];
     if (meshes.some(morphData)) {
       editor.events.onStatus('Join отменён: morph targets пока не объединяются без потери данных');
@@ -46,6 +54,10 @@ export function installDataIntegrity({ editor, editMode, gameReady }) {
     controller.generateLOD = (...args) => {
       const mesh = editor.selected;
       if (mesh?.isMesh) {
+        if (mesh.isInstancedMesh) {
+          controller.status('LOD отменён: InstancedMesh требует instance-aware LOD pipeline');
+          return false;
+        }
         const extras = extraAttributes(mesh, SIMPLIFY_SAFE_ATTRIBUTES);
         if (extras.length) {
           controller.status(`LOD отменён: Three.js r180 SimplifyModifier не сохраняет атрибуты ${extras.join(', ')}`);
