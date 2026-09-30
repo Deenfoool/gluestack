@@ -64,6 +64,7 @@ UV Editing работает непосредственно с `geometry.attribut
 - [x] Shared textures освобождаются только после проверки ссылок остальных Mesh.
 - [x] Multi-material editing: выбор material slot, независимые PBR/texture/transform параметры каждого slot.
 - [x] Texture Paint использует выбранный material slot и игнорирует грани других slots.
+- [x] Multi-channel Texture Paint: Base Color / Roughness / Metallic / Normal / Emissive с корректным color space и scalar brush для Roughness/Metallic.
 
 Материал редактируется непосредственно на Mesh, поэтому параметры и карты передаются существующему `GLTFExporter`. Material groups и количество material slots теперь входят в Diagnostics round-trip.
 
@@ -106,7 +107,7 @@ Animation pipeline сохраняет и проигрывает clips и теп�
 - [ ] Advanced animation editor: Dope Sheet, удаление/перемещение отдельных keyframes, interpolation/easing.
 - [x] Multi-material-aware LOD/Decimate с сохранением geometry groups.
 - [ ] Неразрушающий modifier stack, сохраняемый в `.gluestack`.
-- [ ] Texture Paint для Normal / Roughness / Metallic / Emissive.
+- [x] Texture Paint для Normal / Roughness / Metallic / Emissive.
 - [ ] Улучшенные UV unwrap/packing алгоритмы для сложных production mesh.
 - [ ] Расширенная оптимизация GLB и runtime LOD policy.
 
