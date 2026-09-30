@@ -17,16 +17,13 @@ function uniqueClipName(clips, base = 'Animation') {
 }
 
 function replaceTrackKey(track, time, values, TrackClass) {
-  const itemSize = values.length;
   const entries = [];
-  if (track) {
-    const size = track.getValueSize();
-    for (let i = 0; i < track.times.length; i += 1) {
-      entries.push({
-        time: Number(track.times[i]),
-        values: Array.from(track.values.slice(i * size, i * size + size)),
-      });
-    }
+  const size = track.getValueSize();
+  for (let i = 0; i < track.times.length; i += 1) {
+    entries.push({
+      time: Number(track.times[i]),
+      values: Array.from(track.values.slice(i * size, i * size + size)),
+    });
   }
 
   const existing = entries.find((entry) => Math.abs(entry.time - time) <= EPSILON);
@@ -34,10 +31,12 @@ function replaceTrackKey(track, time, values, TrackClass) {
   else entries.push({ time, values: [...values] });
   entries.sort((a, b) => a.time - b.time);
 
-  const times = entries.map((entry) => entry.time);
-  const flattened = entries.flatMap((entry) => entry.values);
-  const next = new TrackClass(track?.name ?? '', times, flattened);
-  if (track?.getInterpolation) {
+  const next = new TrackClass(
+    track.name,
+    entries.map((entry) => entry.time),
+    entries.flatMap((entry) => entry.values),
+  );
+  if (track.getInterpolation) {
     try { next.setInterpolation(track.getInterpolation()); } catch {}
   }
   return next;
@@ -45,13 +44,11 @@ function replaceTrackKey(track, time, values, TrackClass) {
 
 function upsertTrack(clip, trackName, time, values, TrackClass) {
   const index = clip.tracks.findIndex((track) => track.name === trackName);
-  const existing = index >= 0 ? clip.tracks[index] : null;
-  const seed = existing ?? new TrackClass(trackName, [], []);
-  seed.name = trackName;
-  const next = replaceTrackKey(seed, time, values, TrackClass);
-  next.name = trackName;
-  if (index >= 0) clip.tracks[index] = next;
-  else clip.tracks.push(next);
+  if (index < 0) {
+    clip.tracks.push(new TrackClass(trackName, [time], [...values]));
+    return;
+  }
+  clip.tracks[index] = replaceTrackKey(clip.tracks[index], time, values, TrackClass);
 }
 
 function ensureAnimatedName(editor, object) {
@@ -124,7 +121,6 @@ export function installAnimationEditor(editor) {
     upsertTrack(clip, `${name}.quaternion`, cleanTime, object.quaternion.toArray(), THREE.QuaternionKeyframeTrack);
     upsertTrack(clip, `${name}.scale`, cleanTime, object.scale.toArray(), THREE.VectorKeyframeTrack);
     clip.duration = Math.max(Number.isFinite(clip.duration) ? clip.duration : 0, cleanTime, 0.001);
-    clip.optimize();
     resetScrub();
     emitChanged();
     editor.events.onStatus(`Keyframe · ${clip.name} · ${name} · ${cleanTime.toFixed(2)}s`);
