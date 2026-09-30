@@ -5,7 +5,6 @@ import { ModifierController } from './modifiers/controller.js';
 import { bindModifierControls } from './modifiers/ui-bindings.js';
 import { TransformModal } from './transform-modal.js';
 import { bindKeyboard } from './keyboard.js';
-import { installFeatures } from './features.js';
 import { bevelFace } from './edit/bevel.js';
 import { dissolveSelected } from './edit/dissolve.js';
 import { loopCut } from './edit/cuts.js';
@@ -47,6 +46,7 @@ let knifeTool;
 let modifiers;
 let refreshQueued = false;
 let transformRefreshQueued = false;
+let featureBootstrapError = null;
 
 function setStatus(message) { elements.statusMessage.textContent = message; }
 
@@ -135,9 +135,18 @@ function requestNumber(label, defaultValue, options = {}) {
   return value;
 }
 
-const features = installFeatures({ editor, editMode, knifeTool, requestNumber });
+let features = {};
+try {
+  const { installFeatures } = await import('./features.js');
+  features = installFeatures({ editor, editMode, knifeTool, requestNumber }) ?? {};
+} catch (error) {
+  featureBootstrapError = error instanceof Error ? error : new Error(String(error));
+  console.error('[gluestack] optional feature bundle failed to load', featureBootstrapError);
+  setStatus(`Optional features не загрузились: ${featureBootstrapError.message}`);
+}
 window.__gluestackEditor = editor;
 window.__gluestackFeatures = features;
+window.__gluestackFeatureBootstrapError = featureBootstrapError;
 
 function setTransformMode(mode) {
   editor.setTransformMode(mode);
@@ -311,4 +320,8 @@ bindKeyboard({
 
 scheduleRefresh();
 refreshIcons();
-setStatus('Готово · Modifiers: Mirror / Array / Bevel / Solidify / Subdivision / Decimate / Boolean');
+if (featureBootstrapError) {
+  setStatus(`Базовый редактор готов · Optional features error: ${featureBootstrapError.message}`);
+} else {
+  setStatus('Готово · Modifiers: Mirror / Array / Bevel / Solidify / Subdivision / Decimate / Boolean');
+}
