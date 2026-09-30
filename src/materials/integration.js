@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { refreshIcons } from '../ui.js';
-import { disposeTextureIfUnreferenced } from '../runtime/resource-ownership.js';
+import {
+  disposeMaterialIfUnreferenced,
+  disposeTextureIfUnreferenced,
+} from '../runtime/resource-ownership.js';
 
 const TEXTURE_KEYS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap'];
 
@@ -14,24 +17,33 @@ function materialOf(mesh, slot = 0) {
   return materials[Math.max(0, Math.min(slot, materials.length - 1))] ?? null;
 }
 
-function ensureStandardMaterial(mesh, slot = 0) {
+function ensureStandardMaterial(editor, mesh, slot = 0) {
   let material = materialOf(mesh, slot);
   if (material?.isMeshStandardMaterial) return material;
   const old = material;
   material = new THREE.MeshStandardMaterial({
     color: old?.color?.clone?.() ?? new THREE.Color(0xb8b8b8),
     map: old?.map ?? null,
+    normalMap: old?.normalMap ?? null,
+    aoMap: old?.aoMap ?? null,
+    emissiveMap: old?.emissiveMap ?? null,
     transparent: old?.transparent ?? false,
     opacity: old?.opacity ?? 1,
     side: old?.side ?? THREE.FrontSide,
+    alphaTest: old?.alphaTest ?? 0,
+    depthTest: old?.depthTest ?? true,
+    depthWrite: old?.depthWrite ?? true,
+    vertexColors: old?.vertexColors ?? false,
     metalness: Number.isFinite(old?.metalness) ? old.metalness : 0,
     roughness: Number.isFinite(old?.roughness) ? old.roughness : 0.58,
     emissive: old?.emissive?.clone?.() ?? new THREE.Color(0x000000),
     emissiveIntensity: Number.isFinite(old?.emissiveIntensity) ? old.emissiveIntensity : 1,
   });
   material.name = old?.name || `Material ${slot + 1}`;
+  material.userData = structuredClone(old?.userData ?? {});
   if (Array.isArray(mesh.material)) mesh.material[slot] = material;
   else mesh.material = material;
+  disposeMaterialIfUnreferenced(editor, old);
   return material;
 }
 
@@ -84,6 +96,7 @@ export function installMaterialPanel({ editor }) {
       <label class="material-row"><span>Opacity</span><input data-mat="opacity" type="range" min="0" max="1" step="0.01" value="1" /></label>
       <label class="material-row"><span>Emissive</span><input data-mat="emissive" type="color" value="#000000" /></label>
       <label class="material-row"><span>Emission</span><input data-mat="emissiveIntensity" type="number" min="0" step="0.1" value="1" /></label>
+      <div class="material-note" data-material-conversion-note></div>
     </div>
     <div class="material-card">
       <div class="material-title"><i data-lucide="image"></i><span>Textures</span></div>
@@ -113,6 +126,7 @@ export function installMaterialPanel({ editor }) {
   let slotIndex = 0;
   const slotSelect = panel.querySelector('[data-material-slot]');
   const slotInfo = panel.querySelector('[data-material-slot-info]');
+  const conversionNote = panel.querySelector('[data-material-conversion-note]');
 
   function refreshSlots(mesh = editor.selected) {
     const materials = materialsOf(mesh);
@@ -137,25 +151,35 @@ export function installMaterialPanel({ editor }) {
     slotInfo.textContent = `${materials.length} material slot(s) · selected ${slotIndex + 1}${groups ? ` · groups ${groups}` : ''}`;
   }
 
-  function current() {
+  function readCurrent() {
     const mesh = editor.selected;
     if (!mesh?.isMesh) return null;
     refreshSlots(mesh);
-    return ensureStandardMaterial(mesh, slotIndex);
+    return materialOf(mesh, slotIndex);
+  }
+
+  function editableCurrent() {
+    const mesh = editor.selected;
+    if (!mesh?.isMesh) return null;
+    refreshSlots(mesh);
+    return ensureStandardMaterial(editor, mesh, slotIndex);
   }
 
   function refresh() {
     const mesh = editor.selected;
     if (!mesh?.isMesh) return;
     refreshSlots(mesh);
-    const material = ensureStandardMaterial(mesh, slotIndex);
+    const material = materialOf(mesh, slotIndex);
     if (!material) return;
-    panel.querySelector('[data-mat="color"]').value = `#${material.color.getHexString()}`;
-    panel.querySelector('[data-mat="metalness"]').value = material.metalness;
-    panel.querySelector('[data-mat="roughness"]').value = material.roughness;
-    panel.querySelector('[data-mat="opacity"]').value = material.opacity;
-    panel.querySelector('[data-mat="emissive"]').value = `#${material.emissive.getHexString()}`;
-    panel.querySelector('[data-mat="emissiveIntensity"]').value = material.emissiveIntensity;
+    panel.querySelector('[data-mat="color"]').value = `#${material.color?.getHexString?.() ?? 'b8b8b8'}`;
+    panel.querySelector('[data-mat="metalness"]').value = Number.isFinite(material.metalness) ? material.metalness : 0;
+    panel.querySelector('[data-mat="roughness"]').value = Number.isFinite(material.roughness) ? material.roughness : 0.58;
+    panel.querySelector('[data-mat="opacity"]').value = Number.isFinite(material.opacity) ? material.opacity : 1;
+    panel.querySelector('[data-mat="emissive"]').value = `#${material.emissive?.getHexString?.() ?? '000000'}`;
+    panel.querySelector('[data-mat="emissiveIntensity"]').value = Number.isFinite(material.emissiveIntensity) ? material.emissiveIntensity : 1;
+    conversionNote.textContent = material.isMeshStandardMaterial
+      ? ''
+      : `${material.type || 'Material'} будет преобразован в MeshStandardMaterial только при изменении PBR-параметров или загрузке PBR-карты.`;
     const texture = TEXTURE_KEYS.map((key) => material[key]).find(Boolean) ?? null;
     panel.querySelectorAll('[data-tex-transform]').forEach((input) => {
       const [group, axis] = input.dataset.texTransform.split('.');
@@ -185,14 +209,17 @@ export function installMaterialPanel({ editor }) {
 
   panel.querySelectorAll('[data-mat]').forEach((input) => {
     input.addEventListener('input', () => {
-      const material = current();
-      if (!material) return;
+      const mesh = editor.selected;
+      if (!mesh?.isMesh) return;
       editor.beginHistory(`Material slot ${slotIndex + 1}`);
+      const material = editableCurrent();
+      if (!material) return;
       const key = input.dataset.mat;
       if (key === 'color' || key === 'emissive') material[key].set(input.value);
       else material[key] = Number(input.value);
       if (key === 'opacity') material.transparent = material.opacity < 0.999;
       material.needsUpdate = true;
+      conversionNote.textContent = '';
     });
     input.addEventListener('change', () => editor.commitHistory());
   });
@@ -200,13 +227,19 @@ export function installMaterialPanel({ editor }) {
   panel.querySelectorAll('[data-texture]').forEach((input) => {
     input.addEventListener('change', async () => {
       const file = input.files?.[0];
-      const material = current();
       const mesh = editor.selected;
-      if (!file || !material || !mesh?.isMesh) return;
+      const selectedSlot = slotIndex;
+      if (!file || !mesh?.isMesh) return;
       try {
-        editor.checkpoint(`Texture ${input.dataset.texture} · slot ${slotIndex + 1}`);
         const key = input.dataset.texture;
         const texture = await loadTexture(file, key === 'map' || key === 'emissiveMap');
+        if (editor.selected !== mesh) {
+          texture.dispose();
+          throw new Error('Texture upload отменён: активный объект изменился');
+        }
+        editor.checkpoint(`Texture ${key} · slot ${selectedSlot + 1}`);
+        slotIndex = selectedSlot;
+        const material = ensureStandardMaterial(editor, mesh, selectedSlot);
         const oldTexture = material[key];
         material[key] = texture;
         disposeTextureIfUnreferenced(editor, oldTexture);
@@ -215,8 +248,9 @@ export function installMaterialPanel({ editor }) {
           if (uv) mesh.geometry.setAttribute('uv1', uv.clone());
         }
         material.needsUpdate = true;
-        editor.events.onStatus(`${file.name} → slot ${slotIndex + 1} / ${key}`);
-        window.dispatchEvent(new CustomEvent('gluestack:texture-changed', { detail: { mesh, texture, key, slot: slotIndex } }));
+        conversionNote.textContent = '';
+        editor.events.onStatus(`${file.name} → slot ${selectedSlot + 1} / ${key}`);
+        window.dispatchEvent(new CustomEvent('gluestack:texture-changed', { detail: { mesh, texture, key, slot: selectedSlot } }));
       } catch (error) {
         editor.events.onStatus(error.message || String(error));
       } finally {
@@ -226,15 +260,16 @@ export function installMaterialPanel({ editor }) {
   });
 
   panel.querySelector('[data-material-action="clear-textures"]').addEventListener('click', () => {
-    const material = current();
+    const material = readCurrent();
     const mesh = editor.selected;
     if (!material || !mesh?.isMesh) return;
-    editor.checkpoint(`Clear textures · slot ${slotIndex + 1}`);
-    const detached = [];
-    for (const key of TEXTURE_KEYS) {
-      if (material[key]) detached.push(material[key]);
-      material[key] = null;
+    const detached = TEXTURE_KEYS.map((key) => material[key]).filter(Boolean);
+    if (!detached.length) {
+      editor.events.onStatus(`Material slot ${slotIndex + 1}: текстур нет`);
+      return;
     }
+    editor.checkpoint(`Clear textures · slot ${slotIndex + 1}`);
+    for (const key of TEXTURE_KEYS) material[key] = null;
     detached.forEach((texture) => disposeTextureIfUnreferenced(editor, texture));
     material.needsUpdate = true;
     editor.events.onStatus(`Текстуры material slot ${slotIndex + 1} очищены`);
@@ -242,7 +277,7 @@ export function installMaterialPanel({ editor }) {
   });
 
   function applyTextureTransform() {
-    const material = current();
+    const material = readCurrent();
     if (!material) return;
     const values = Object.fromEntries([...panel.querySelectorAll('[data-tex-transform]')].map((input) => [input.dataset.texTransform, Number(input.value)]));
     const rotation = THREE.MathUtils.degToRad(Number(panel.querySelector('[data-tex-rotation]').value) || 0);
@@ -257,7 +292,10 @@ export function installMaterialPanel({ editor }) {
     }
   }
   panel.querySelectorAll('[data-tex-transform],[data-tex-rotation]').forEach((input) => {
-    input.addEventListener('focus', () => editor.beginHistory(`Texture transform · slot ${slotIndex + 1}`));
+    input.addEventListener('focus', () => {
+      const material = readCurrent();
+      if (material && TEXTURE_KEYS.some((key) => material[key])) editor.beginHistory(`Texture transform · slot ${slotIndex + 1}`);
+    });
     input.addEventListener('input', applyTextureTransform);
     input.addEventListener('change', () => editor.commitHistory());
   });
