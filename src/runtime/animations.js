@@ -42,6 +42,14 @@ function namesIn(objects = []) {
   return names;
 }
 
+function nameUsedByOther(editor, object, name) {
+  let used = false;
+  editor.modelRoot?.traverse?.((candidate) => {
+    if (!used && candidate !== object && candidate.name === name) used = true;
+  });
+  return used;
+}
+
 export function installAnimations(editor) {
   if (!editor || editor.__gluestackAnimations) return editor.__gluestackAnimations ?? null;
 
@@ -169,7 +177,11 @@ export function installAnimations(editor) {
   editor.renameSelected = (name) => {
     const object = editor.selected;
     const oldName = object?.name ?? '';
-    originalRenameSelected(name);
+    let requested = String(name ?? '').trim();
+    if (object && requested && requested !== oldName && nameUsedByOther(editor, object, requested)) {
+      requested = editor.uniqueName(requested);
+    }
+    originalRenameSelected(requested || name);
     const newName = object?.name ?? '';
     if (!oldName || !newName || oldName === newName || !editor.animations.length) return;
     let changed = 0;
