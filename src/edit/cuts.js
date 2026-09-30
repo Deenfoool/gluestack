@@ -1,3 +1,4 @@
+import { faceAttributeMaps, interpolateTuple } from './attributes.js';
 import {
   cloneTriangle,
   edgeKey,
@@ -110,18 +111,29 @@ export function loopCut(controller, factor = 0.5) {
 
     const mA = midpointIds.get(keyA);
     const mB = midpointIds.get(keyB);
+    const attrMaps = faceAttributeMaps(group, controller.triangles);
+    const edgeA = edgeLookup.get(keyA);
+    const edgeB = edgeLookup.get(keyB);
+    for (const map of Object.values(attrMaps)) {
+      map.set(mA, interpolateTuple(map.get(edgeA.a), map.get(edgeA.b), factor));
+      map.set(mB, interpolateTuple(map.get(edgeB.a), map.get(edgeB.b), factor));
+    }
     const materialIndex = controller.triangles[group.triangles[0]]?.materialIndex ?? 0;
     triangles.push(...triangulateLoop(
       [mA, rotated[1], rotated[2], mB],
       group.normal,
       materialIndex,
       vertices,
+      null,
+      attrMaps,
     ));
     triangles.push(...triangulateLoop(
       [mA, mB, rotated[3], rotated[0]],
       group.normal,
       materialIndex,
       vertices,
+      null,
+      attrMaps,
     ));
   }
 
