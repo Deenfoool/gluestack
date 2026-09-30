@@ -78,12 +78,24 @@ export function renderInspector(editor, editMode, elements) {
     objectName,
     activePropertyTab = 'object',
   } = elements;
+  const materialProperties = document.querySelector('#material-properties');
+  const gameReadyProperties = document.querySelector('#game-ready-properties');
+
+  if (gameReadyProperties && !gameReadyProperties.hidden) {
+    emptyProperties.hidden = true;
+    objectProperties.hidden = true;
+    if (modifierProperties) modifierProperties.hidden = true;
+    if (materialProperties) materialProperties.hidden = true;
+    return;
+  }
+
   const object = editor.selected;
   if (!object) {
     emptyProperties.hidden = false;
     emptyProperties.textContent = 'Выберите объект';
     objectProperties.hidden = true;
     if (modifierProperties) modifierProperties.hidden = true;
+    if (materialProperties) materialProperties.hidden = true;
     return;
   }
 
@@ -92,12 +104,14 @@ export function renderInspector(editor, editMode, elements) {
     emptyProperties.textContent = 'Edit Mode: трансформируйте выбранные компоненты во viewport. Object Transform и Modifiers заблокированы до выхода по Tab.';
     objectProperties.hidden = true;
     if (modifierProperties) modifierProperties.hidden = true;
+    if (materialProperties) materialProperties.hidden = true;
     return;
   }
 
   emptyProperties.hidden = true;
   objectProperties.hidden = activePropertyTab !== 'object';
   if (modifierProperties) modifierProperties.hidden = activePropertyTab !== 'modifiers';
+  if (materialProperties) materialProperties.hidden = activePropertyTab !== 'material';
   if (activePropertyTab !== 'object') return;
 
   if (document.activeElement !== objectName) objectName.value = object.name || object.type || 'Object';
@@ -129,7 +143,7 @@ export function renderModeUI(editor, editMode, elements) {
   editSelectModes.hidden = !editMode.active;
   objectMenu.hidden = editMode.active;
   meshMenu.hidden = !editMode.active;
-  buildLabel.textContent = editMode.active ? 'Edit Mode · v0.5' : 'Object Mode · v0.5';
+  buildLabel.textContent = editMode.active ? 'Edit Mode · v0.7' : 'Object Mode · v0.7';
 
   document.querySelectorAll('[data-edit-select-mode]').forEach((button) => {
     button.classList.toggle('active', editMode.active && button.dataset.editSelectMode === editMode.selectionMode);
@@ -138,6 +152,8 @@ export function renderModeUI(editor, editMode, elements) {
   document.querySelectorAll('.edit-only').forEach((element) => { element.hidden = !editMode.active; });
   const modifierTab = document.querySelector('[data-property-tab="modifiers"]');
   if (modifierTab) modifierTab.disabled = editMode.active || !editor.selected?.isMesh;
+  const materialTab = document.querySelector('[data-property-tab="material"]');
+  if (materialTab) materialTab.disabled = editMode.active || !editor.selected?.isMesh;
 }
 
 export function renderHistory(state) {
