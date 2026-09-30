@@ -1,5 +1,5 @@
 const JOIN_SAFE_ATTRIBUTES = new Set(['position', 'normal', 'uv']);
-const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap'];
+const SIMPLIFY_SAFE_ATTRIBUTES = new Set(['position', 'uv', 'normal', 'tangent', 'color']);
 
 function morphData(mesh) {
   if (mesh?.morphTargetInfluences?.length) return true;
@@ -8,11 +8,6 @@ function morphData(mesh) {
 
 function extraAttributes(mesh, allowed) {
   return Object.keys(mesh?.geometry?.attributes ?? {}).filter((name) => !allowed.has(name));
-}
-
-function materialUsesTextures(mesh) {
-  const materials = Array.isArray(mesh?.material) ? mesh.material : mesh?.material ? [mesh.material] : [];
-  return materials.some((material) => TEXTURE_SLOTS.some((slot) => material?.[slot]?.isTexture));
 }
 
 export function installDataIntegrity({ editor, editMode, gameReady }) {
@@ -51,13 +46,17 @@ export function installDataIntegrity({ editor, editMode, gameReady }) {
     controller.generateLOD = (...args) => {
       const mesh = editor.selected;
       if (mesh?.isMesh) {
-        const extras = extraAttributes(mesh, new Set(['position', 'normal']));
-        if (extras.length || materialUsesTextures(mesh)) {
-          controller.status(`LOD отменён: SimplifyModifier не сохраняет безопасно ${extras.length ? extras.join(', ') : 'texture coordinates'}`);
+        const extras = extraAttributes(mesh, SIMPLIFY_SAFE_ATTRIBUTES);
+        if (extras.length) {
+          controller.status(`LOD отменён: Three.js r180 SimplifyModifier не сохраняет атрибуты ${extras.join(', ')}`);
           return false;
         }
         if (morphData(mesh)) {
           controller.status('LOD отменён: morph targets требуют отдельного LOD pipeline');
+          return false;
+        }
+        if (Array.isArray(mesh.material) && mesh.material.length > 1) {
+          controller.status('LOD отменён: multi-material geometry groups не сохраняются SimplifyModifier r180');
           return false;
         }
       }
