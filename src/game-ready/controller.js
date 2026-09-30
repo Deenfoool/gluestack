@@ -4,6 +4,7 @@ import { SimplifyModifier } from 'three/addons/modifiers/SimplifyModifier.js';
 import { disposeGeometryIfUnreferenced } from '../runtime/resource-ownership.js';
 
 const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap'];
+const SIMPLIFY_SAFE_ATTRIBUTES = new Set(['position', 'uv', 'normal', 'tangent', 'color']);
 
 function materialsOf(mesh) {
   return Array.isArray(mesh.material) ? mesh.material.filter(Boolean) : mesh.material ? [mesh.material] : [];
@@ -103,6 +104,13 @@ export class GameReadyController {
       }
       if (hasMorphTargets(object)) {
         result.issues.push({ level: 'warning', object: object.name, message: 'Morph targets: автоматический LOD отключён, чтобы не потерять morph data' });
+      }
+      const unsupported = Object.keys(geometry.attributes).filter((name) => !SIMPLIFY_SAFE_ATTRIBUTES.has(name));
+      if (unsupported.length) {
+        result.issues.push({ level: 'warning', object: object.name, message: `LOD/Decimate guard: unsupported attributes ${unsupported.join(', ')}` });
+      }
+      if (Array.isArray(object.material) && object.material.length > 1) {
+        result.issues.push({ level: 'warning', object: object.name, message: 'LOD/Decimate guard: multi-material groups require a dedicated simplification pipeline' });
       }
       for (let i = 0; i < position.count; i += 1) {
         if (![position.getX(i), position.getY(i), position.getZ(i)].every(Number.isFinite)) {
@@ -207,11 +215,16 @@ export class GameReadyController {
       return false;
     }
     if (Array.isArray(source.material) && source.material.length > 1) {
-      this.status('LOD: multi-material Mesh пока не поддерживается SimplifyModifier без потери material groups');
+      this.status('LOD: multi-material Mesh пока не поддерживается — SimplifyModifier r180 не сохраняет geometry groups');
       return false;
     }
     if (hasMorphTargets(source)) {
       this.status('LOD: morph targets не упрощаются автоматически, чтобы не потерять morph data');
+      return false;
+    }
+    const unsupported = Object.keys(source.geometry.attributes).filter((name) => !SIMPLIFY_SAFE_ATTRIBUTES.has(name));
+    if (unsupported.length) {
+      this.status(`LOD отменён: SimplifyModifier r180 не сохраняет атрибуты ${unsupported.join(', ')}`);
       return false;
     }
     if ((source.userData.gluestackLOD?.level ?? 0) > 0) {
@@ -262,7 +275,8 @@ export class GameReadyController {
           geometry.dispose();
           continue;
         }
-        geometry.computeVertexNormals();
+        if (!normalsAreValid(geometry)) geometry.computeVertexNormals();
+        else geometry.normalizeNormals();
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
       } catch (error) {
@@ -289,7 +303,8 @@ export class GameReadyController {
       this.status('LOD: упрощённые уровни не удалось построить для этой геометрии');
       return false;
     }
-    this.status(`LOD создан: ${generated.map((mesh) => mesh.name).join(', ')}`);
+    const uvKept = generated.slice(1).every((mesh) => Boolean(mesh.geometry.getAttribute('uv'))) && Boolean(source.geometry.getAttribute('uv'));
+    this.status(`LOD создан: ${generated.map((mesh) => mesh.name).join(', ')}${uvKept ? ' · UV сохранён' : ''}`);
     return true;
   }
 }
