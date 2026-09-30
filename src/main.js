@@ -2,6 +2,9 @@ import { Editor3D } from './editor.js';
 import { EditModeController } from './edit/controller.js';
 import { TransformModal } from './transform-modal.js';
 import { bindKeyboard } from './keyboard.js';
+import { bevelFace } from './edit/bevel.js';
+import { dissolveSelected } from './edit/dissolve.js';
+import { knifeCenter, loopCut } from './edit/cuts.js';
 import {
   refreshIcons,
   renderHistory,
@@ -37,9 +40,7 @@ let editMode;
 let refreshQueued = false;
 let transformRefreshQueued = false;
 
-function setStatus(message) {
-  elements.statusMessage.textContent = message;
-}
+function setStatus(message) { elements.statusMessage.textContent = message; }
 
 function scheduleRefresh() {
   if (refreshQueued) return;
@@ -92,9 +93,7 @@ const transformModal = new TransformModal(
   scheduleTransformRefresh,
 );
 
-function closeMenus() {
-  $$('.menu[open]').forEach((menu) => menu.removeAttribute('open'));
-}
+function closeMenus() { $$('.menu[open]').forEach((menu) => menu.removeAttribute('open')); }
 
 function requestNumber(label, defaultValue, options = {}) {
   const raw = window.prompt(label, String(defaultValue));
@@ -144,8 +143,10 @@ function runEditAction(action) {
     case 'edit-select-all': editMode.selectAll(); return true;
     case 'edit-deselect': editMode.deselectAll(); return true;
     case 'edit-delete': editMode.deleteSelection(); return true;
+    case 'edit-dissolve': dissolveSelected(editMode); return true;
     case 'edit-merge': editMode.mergeSelected(); return true;
     case 'edit-fill': editMode.fillSelected(); return true;
+    case 'edit-knife': knifeCenter(editMode); return true;
     case 'edit-recalculate-normals': editMode.recalculateNormals(); return true;
     case 'edit-flip-normals': editMode.flipNormals(); return true;
     case 'edit-extrude': {
@@ -158,6 +159,18 @@ function runEditAction(action) {
       if (value !== null) editMode.inset(value);
       return true;
     }
+    case 'edit-bevel': {
+      const factor = requestNumber('Bevel factor (0..0.5)', 0.12, { min: 0.001, max: 0.499 });
+      if (factor === null) return true;
+      const depth = requestNumber('Bevel depth', 0.08);
+      if (depth !== null) bevelFace(editMode, factor, depth);
+      return true;
+    }
+    case 'edit-loop-cut': {
+      const factor = requestNumber('Loop Cut factor (0..1)', 0.5, { min: 0.001, max: 0.999 });
+      if (factor !== null) loopCut(editMode, factor);
+      return true;
+    }
     default: return false;
   }
 }
@@ -165,10 +178,7 @@ function runEditAction(action) {
 function runAction(action) {
   closeMenus();
   if (transformModal.state) transformModal.cancel(true);
-  if (action === 'toggle-mode') {
-    editMode.toggle();
-    return;
-  }
+  if (action === 'toggle-mode') { editMode.toggle(); return; }
   if (editMode.active && runEditAction(action)) return;
 
   if (editMode.active && (action === 'undo' || action === 'redo')) editMode.exit();
@@ -191,12 +201,8 @@ function runAction(action) {
   }
 }
 
-$$('[data-action]').forEach((button) => {
-  button.addEventListener('click', () => runAction(button.dataset.action));
-});
-$$('[data-history]').forEach((button) => {
-  button.addEventListener('click', () => runAction(button.dataset.history));
-});
+$$('[data-action]').forEach((button) => button.addEventListener('click', () => runAction(button.dataset.action)));
+$$('[data-history]').forEach((button) => button.addEventListener('click', () => runAction(button.dataset.history)));
 $$('[data-primitive]').forEach((button) => {
   button.addEventListener('click', () => {
     if (transformModal.state) transformModal.cancel(true);
@@ -257,4 +263,4 @@ bindKeyboard({
 
 scheduleRefresh();
 refreshIcons();
-setStatus('Готово · Tab Edit Mode · 1/2/3 Vertex/Edge/Face · G/R/S transform');
+setStatus('Готово · Tab Edit Mode · Ctrl+B Bevel · Ctrl+R Loop Cut · Ctrl+X Dissolve · K Knife Center');
