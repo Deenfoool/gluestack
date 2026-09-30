@@ -71,24 +71,35 @@ export function renderOutliner(editor, editMode, outliner) {
 }
 
 export function renderInspector(editor, editMode, elements) {
-  const { emptyProperties, objectProperties, objectName } = elements;
+  const {
+    emptyProperties,
+    objectProperties,
+    modifierProperties,
+    objectName,
+    activePropertyTab = 'object',
+  } = elements;
   const object = editor.selected;
   if (!object) {
     emptyProperties.hidden = false;
     emptyProperties.textContent = 'Выберите объект';
     objectProperties.hidden = true;
+    if (modifierProperties) modifierProperties.hidden = true;
     return;
   }
 
   if (editMode.active) {
     emptyProperties.hidden = false;
-    emptyProperties.textContent = 'Edit Mode: трансформируйте выбранные компоненты во viewport. Object Transform заблокирован до выхода по Tab.';
+    emptyProperties.textContent = 'Edit Mode: трансформируйте выбранные компоненты во viewport. Object Transform и Modifiers заблокированы до выхода по Tab.';
     objectProperties.hidden = true;
+    if (modifierProperties) modifierProperties.hidden = true;
     return;
   }
 
   emptyProperties.hidden = true;
-  objectProperties.hidden = false;
+  objectProperties.hidden = activePropertyTab !== 'object';
+  if (modifierProperties) modifierProperties.hidden = activePropertyTab !== 'modifiers';
+  if (activePropertyTab !== 'object') return;
+
   if (document.activeElement !== objectName) objectName.value = object.name || object.type || 'Object';
   const rotationDegrees = editor.getRotationDegrees(object);
   document.querySelectorAll('[data-transform]').forEach((input) => {
@@ -118,13 +129,15 @@ export function renderModeUI(editor, editMode, elements) {
   editSelectModes.hidden = !editMode.active;
   objectMenu.hidden = editMode.active;
   meshMenu.hidden = !editMode.active;
-  buildLabel.textContent = editMode.active ? 'Edit Mode · v0.4' : 'Object Mode · v0.4';
+  buildLabel.textContent = editMode.active ? 'Edit Mode · v0.5' : 'Object Mode · v0.5';
 
   document.querySelectorAll('[data-edit-select-mode]').forEach((button) => {
     button.classList.toggle('active', editMode.active && button.dataset.editSelectMode === editMode.selectionMode);
   });
   document.querySelectorAll('.object-only').forEach((element) => { element.hidden = editMode.active; });
   document.querySelectorAll('.edit-only').forEach((element) => { element.hidden = !editMode.active; });
+  const modifierTab = document.querySelector('[data-property-tab="modifiers"]');
+  if (modifierTab) modifierTab.disabled = editMode.active || !editor.selected?.isMesh;
 }
 
 export function renderHistory(state) {
