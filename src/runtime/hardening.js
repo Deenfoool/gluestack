@@ -136,6 +136,12 @@ function installProjectState(editor, projects) {
   };
 }
 
+function leaveSpecializedWorkspace() {
+  const activeWorkspace = document.querySelector('.workspace-tab.active')?.dataset.workspace;
+  if (activeWorkspace !== 'uv' && activeWorkspace !== 'paint') return;
+  document.querySelector('[data-workspace="layout"]')?.click();
+}
+
 function installPropertiesCoordinator(editor, editMode) {
   const tabs = document.querySelector('.properties-tabs');
   const content = document.querySelector('.properties-content');
@@ -197,6 +203,7 @@ function installPropertiesCoordinator(editor, editMode) {
     const previous = editor.events[eventName];
     editor.events[eventName] = (...args) => {
       previous(...args);
+      if (eventName === 'onSelection') leaveSpecializedWorkspace();
       requestAnimationFrame(apply);
     };
   }
