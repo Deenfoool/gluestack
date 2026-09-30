@@ -1,19 +1,10 @@
 import { bevelFace } from './edit/bevel.js';
 import { dissolveSelected } from './edit/dissolve.js';
 import { loopCut } from './edit/cuts.js';
-import { installUVWorkspace } from './uv/integration.js';
-import { installMaterialPanel } from './materials/integration.js';
-import { installProjects } from './projects/integration.js';
+import { installFeatures } from './features.js';
 
 export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snapButton, openAddMenu, requestNumber }) {
-  installUVWorkspace({ editor, editMode, knifeTool, requestNumber });
-  const materialPanel = installMaterialPanel({ editor });
-  installProjects({ editor, editMode, knifeTool });
-  const previousSelectionHandler = editor.events.onSelection;
-  editor.events.onSelection = (...args) => {
-    previousSelectionHandler(...args);
-    if (materialPanel && !materialPanel.panel.hidden) materialPanel.refresh();
-  };
+  installFeatures({ editor, editMode, knifeTool, requestNumber });
 
   window.addEventListener('keydown', (event) => {
     const target = event.target;
