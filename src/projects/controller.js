@@ -45,7 +45,6 @@ export class ProjectController {
   }
 
   async exportSceneBuffer() {
-    if (!this.editor.modelRoot.children.length) throw new Error('Сцена пуста');
     return new Promise((resolve, reject) => {
       this.editor.exporter.parse(
         this.editor.modelRoot,
@@ -128,6 +127,7 @@ export class ProjectController {
     const active = byId.get(metadata.selection?.activeId) ?? selected.at(-1) ?? null;
     if (selected.length) this.editor.selectMany(selected, active);
     else if (this.editor.modelRoot.children.length) this.editor.select(this.editor.modelRoot.children[0]);
+    else this.editor.clearSelection();
 
     if (metadata.camera) {
       const { camera } = metadata;
@@ -169,7 +169,6 @@ export class ProjectController {
   }
 
   async autosave() {
-    if (!this.editor.modelRoot.children.length) return;
     try {
       const buffer = await this.encodeProject();
       await this.putRecord({ id: AUTOSAVE_ID, name: this.name, updatedAt: Date.now(), buffer });
