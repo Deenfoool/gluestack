@@ -1,10 +1,8 @@
 import * as THREE from 'three';
-import { attributesForTriangle, faceAttributeMaps } from '../edit/attributes.js';
+import { faceAttributeMaps } from '../edit/attributes.js';
 import {
-  makeTriangle,
   orderBoundaryLoop,
   readMeshTopology,
-  triangleNormal,
   triangulateLoop,
 } from '../edit/topology.js';
 
