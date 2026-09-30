@@ -1,11 +1,25 @@
 import * as THREE from 'three';
 import { applyDecimate, applyTriangulate } from './advanced.js';
-import { applyBoolean } from './boolean.js';
 import { applyBevelModifier } from './bevel.js';
 
 function inputNumber(root, selector, fallback = 0) {
   const value = Number(root.querySelector(selector)?.value);
   return Number.isFinite(value) ? value : fallback;
+}
+
+let booleanModulePromise = null;
+
+async function runBoolean(modifiers, operation) {
+  try {
+    booleanModulePromise ??= import('./boolean.js');
+    const { applyBoolean } = await booleanModulePromise;
+    return applyBoolean(modifiers, operation);
+  } catch (error) {
+    booleanModulePromise = null;
+    console.error('[gluestack] Boolean module failed to load', error);
+    modifiers.onStatus(`Boolean недоступен: ${error.message || error}`);
+    return false;
+  }
 }
 
 export function bindModifierControls(modifiers, root = document) {
@@ -45,6 +59,6 @@ export function bindModifierControls(modifiers, root = document) {
   });
 
   root.querySelectorAll('[data-modifier-boolean]').forEach((button) => {
-    button.addEventListener('click', () => applyBoolean(modifiers, button.dataset.modifierBoolean));
+    button.addEventListener('click', () => runBoolean(modifiers, button.dataset.modifierBoolean));
   });
 }
