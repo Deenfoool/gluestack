@@ -1,4 +1,10 @@
 import * as THREE from 'three';
+import {
+  cloneCornerAttributes,
+  createAttributeState,
+  readCornerAttributes,
+  writeCornerAttributes,
+} from './attributes.js';
 
 export const EPSILON = 1e-5;
 const FACE_DOT_THRESHOLD = 0.9995;
@@ -36,6 +42,7 @@ export function readMeshTopology(mesh) {
   const sourceToLogical = new Array(position.count);
   const grouped = new Map();
   const vertices = [];
+  const attributeState = createAttributeState(geometry);
 
   for (let sourceIndex = 0; sourceIndex < position.count; sourceIndex += 1) {
     const vector = new THREE.Vector3().fromBufferAttribute(position, sourceIndex);
@@ -61,16 +68,24 @@ export function readMeshTopology(mesh) {
     const logical = source.map((sourceIndex) => sourceToLogical[sourceIndex]);
     if (new Set(logical).size < 3) continue;
     sourceFaceToTriangle[sourceFace] = triangles.length;
+    const attrs = readCornerAttributes(geometry, attributeState, source);
     triangles.push({
       v: logical,
       uv: source.map((sourceIndex) => (
         uv ? new THREE.Vector2().fromBufferAttribute(uv, sourceIndex) : new THREE.Vector2()
       )),
+      attrs,
       materialIndex: materialIndexForOffset(geometry, offset),
     });
   }
 
-  return { vertices, triangles, sourceFaceToTriangle, ...buildTopology(vertices, triangles) };
+  return {
+    vertices,
+    triangles,
+    sourceFaceToTriangle,
+    attributeState,
+    ...buildTopology(vertices, triangles),
+  };
 }
 
 export function buildTopology(vertices, triangles) {
@@ -164,7 +179,7 @@ export function syncLogicalPositions(mesh, vertices) {
   mesh.geometry.computeBoundingSphere();
 }
 
-export function rebuildMeshGeometry(mesh, vertices, triangles) {
+export function rebuildMeshGeometry(mesh, vertices, triangles, attributeState = createAttributeState(mesh.geometry)) {
   const geometry = new THREE.BufferGeometry();
   const positions = [];
   const uvs = [];
@@ -193,6 +208,7 @@ export function rebuildMeshGeometry(mesh, vertices, triangles) {
 
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  writeCornerAttributes(geometry, attributeState, triangles);
   runs.forEach((run) => geometry.addGroup(run.start, run.count, run.materialIndex));
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
@@ -205,14 +221,16 @@ export function cloneTriangle(triangle) {
   return {
     v: [...triangle.v],
     uv: triangle.uv.map((item) => item.clone()),
+    attrs: cloneCornerAttributes(triangle.attrs),
     materialIndex: triangle.materialIndex ?? 0,
   };
 }
 
-export function makeTriangle(vertices, materialIndex = 0, uv = [[0, 0], [1, 0], [0, 1]]) {
+export function makeTriangle(vertices, materialIndex = 0, uv = [[0, 0], [1, 0], [0, 1]], attrs = {}) {
   return {
     v: [...vertices],
     uv: uv.map(([x, y]) => new THREE.Vector2(x, y)),
+    attrs: cloneCornerAttributes(attrs),
     materialIndex,
   };
 }
@@ -256,12 +274,24 @@ export function estimateLoopNormal(loop, vertices) {
   return normal.normalize();
 }
 
-export function triangulateLoop(loop, desiredNormal, materialIndex, vertices) {
+export function triangulateLoop(loop, desiredNormal, materialIndex, vertices, uvByVertex = null, attrsByVertex = null) {
   const result = [];
   for (let i = 1; i < loop.length - 1; i += 1) {
     const ids = [loop[0], loop[i], loop[i + 1]];
     if (triangleNormal({ v: ids }, vertices).dot(desiredNormal) < 0) [ids[1], ids[2]] = [ids[2], ids[1]];
-    result.push(makeTriangle(ids, materialIndex));
+    const uv = uvByVertex
+      ? ids.map((id) => {
+          const value = uvByVertex.get(id) ?? new THREE.Vector2();
+          return [value.x, value.y];
+        })
+      : [[0, 0], [1, 0], [0, 1]];
+    const attrs = {};
+    if (attrsByVertex) {
+      for (const [name, valueMap] of Object.entries(attrsByVertex)) {
+        attrs[name] = ids.map((id) => [...(valueMap.get(id) ?? [])]);
+      }
+    }
+    result.push(makeTriangle(ids, materialIndex, uv, attrs));
   }
   return result;
 }
