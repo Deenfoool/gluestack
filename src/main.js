@@ -5,6 +5,7 @@ import { ModifierController } from './modifiers/controller.js';
 import { bindModifierControls } from './modifiers/ui-bindings.js';
 import { TransformModal } from './transform-modal.js';
 import { bindKeyboard } from './keyboard.js';
+import { installFeatures } from './features.js';
 import { bevelFace } from './edit/bevel.js';
 import { dissolveSelected } from './edit/dissolve.js';
 import { loopCut } from './edit/cuts.js';
@@ -133,6 +134,10 @@ function requestNumber(label, defaultValue, options = {}) {
   if (options.max !== undefined && value > options.max) return null;
   return value;
 }
+
+const features = installFeatures({ editor, editMode, knifeTool, requestNumber });
+window.__gluestackEditor = editor;
+window.__gluestackFeatures = features;
 
 function setTransformMode(mode) {
   editor.setTransformMode(mode);
