@@ -38,10 +38,10 @@
 - [x] Bevel Modifier: базовый manifold chamfer без Segments/Profile.
 - [x] Solidify.
 - [x] Loop-style Subdivision, 1–3 уровня.
-- [x] Decimate через Three.js SimplifyModifier + Triangulate / Normalize.
+- [x] Decimate через Three.js r180 SimplifyModifier + Triangulate / Normalize.
 - [x] Boolean Union / Difference / Intersect для watertight/two-manifold Mesh через three-bvh-csg. Cutter сохраняется.
 
-Модификаторы на текущем этапе применяются destructive-операцией с общей Undo/Redo историей. QA-защита блокирует Decimate/Boolean/Join и destructive modifiers, если текущая реализация потеряет UV, custom attributes, morph data или material groups. Данные не должны удаляться молча.
+Модификаторы на текущем этапе применяются destructive-операцией с общей Undo/Redo историей. QA-защита блокирует операции, если текущая реализация потеряет custom attributes, morph data или material groups. Для Decimate r180 безопасно сохраняются `position`, `uv`, `normal`, `tangent`, `color`; `uv1+`, skin/custom attributes и multi-material groups блокируются.
 
 ## Этап 4 — UV Editing
 - [x] Отдельный workspace UV Editing с UV canvas и существующим Three.js viewport без второго renderer.
@@ -62,42 +62,48 @@ UV Editing работает непосредственно с `geometry.attribut
 - [x] Material Preview во viewport.
 - [x] Texture Offset / Scale / Rotation и Base Color preview в UV Editor.
 - [x] Shared textures освобождаются только после проверки ссылок остальных Mesh.
+- [x] Multi-material editing: выбор material slot, независимые PBR/texture/transform параметры каждого slot.
+- [x] Texture Paint использует выбранный material slot и игнорирует грани других slots.
 
-Материал редактируется непосредственно на Mesh, поэтому параметры и карты передаются существующему `GLTFExporter`. Для multi-material Mesh на текущем этапе Material Properties редактирует первый material slot.
+Материал редактируется непосредственно на Mesh, поэтому параметры и карты передаются существующему `GLTFExporter`. Material groups и количество material slots теперь входят в Diagnostics round-trip.
 
 ## Этап 6 — проекты
 - [x] Локальные именованные проекты через IndexedDB.
 - [x] Debounced autosave и восстановление последней сессии.
 - [x] Собственный бинарный `.gluestack`: GLB + редакторские метаданные (камера, selection, snap, userData/extras).
 - [x] History snapshots клонируют Skinned hierarchy через `SkeletonUtils.clone`, а CanvasTexture — отдельным canvas snapshot.
+- [x] После открытия `.gluestack` обычные Mesh снова получают независимые editable geometry/material resources.
 
-Один и тот же project container используется для скачиваемого файла и IndexedDB, поэтому локальный snapshot и файл проекта не расходятся по формату. Текстуры хранятся внутри вложенного GLB.
+Один и тот же project container используется для скачиваемого файла и IndexedDB, поэтому локальный snapshot и файл проекта не расходятся по формату. Текстуры и animation clips хранятся внутри вложенного GLB.
 
 ## Этап 7 — Game Ready
 - [x] Статистика meshes / vertices / triangles / materials / textures и оценка texture RAM.
 - [x] Проверка missing normals, non-unit scale, пустых meshes, NaN/Infinity и слишком крупных текстур.
 - [x] Optimize Scene: merge compatible vertices, сохранение валидных normals и dedup эквивалентных материалов.
 - [x] Генерация LOD0/LOD1/LOD2 и расчёт реального размера итогового `.glb` через `GLTFExporter`.
-- [x] Diagnostics проверяет GLB export→parse и сохранность UV/PBR/texture slots/extras, а также `.gluestack` metadata.
+- [x] UV-safe LOD/Decimate для single-material Mesh с атрибутами, поддерживаемыми Three.js r180 SimplifyModifier (`position`, `uv`, `normal`, `tangent`, `color`).
+- [x] Diagnostics проверяет GLB export→parse, UV/PBR/material groups/texture slots/extras, animation clips/tracks и `.gluestack` metadata/payload.
 
-LOD-уровни получают `userData.gluestackLOD`; LOD1/LOD2 скрываются во viewport, но остаются в сцене. Текущий SimplifyModifier допускается только для geometry, где не будут потеряны UV/custom/morph данные; для production textured mesh нужен отдельный UV-safe LOD pipeline.
+LOD-уровни получают `userData.gluestackLOD`; LOD1/LOD2 скрываются во viewport, но остаются в сцене. Multi-material groups, morph targets и неподдерживаемые custom attributes по-прежнему блокируются до отдельного simplification pipeline.
 
 ## Этап 8 — расширение
 - [x] Texture Paint по Base Color прямо на 3D-модели через raycast + UV; настройки Color / Size / Strength.
 - [x] Procedural low-poly generators: Rock, Island, Tree, Crate.
 - [x] Scene/Camera controls: фон, рабочее освещение, FOV/Near/Far, Reset View, добавление экспортируемых Point/Directional Light и Camera from View.
+- [x] Animation clip import/export/project/history round-trip через штатный `GLTFExporter.animations`.
+- [x] Animation preview: список clips, Play/Stop и скорость.
+- [x] Rename retargets animation track paths; Delete/Join/Separate удаляют tracks только для реально исчезнувших узлов.
 
-Texture Paint в текущей версии ориентирован на Base Color. Более сложные paint-каналы (Normal/Roughness/Metallic) логично развивать отдельным следующим этапом после browser QA текущего MVP.
+Animation pipeline сейчас сохраняет и проигрывает существующие clips. Полноценный keyframe/timeline editor пока не реализован.
 
 ## После MVP
 - [ ] Полный browser smoke-test всех workspaces и операций на GitHub Pages.
 - [x] Runtime failure isolation: сбой дополнительного feature-модуля не должен валить Object/Edit Mode.
 - [x] Safe disposal shared geometry/material/texture resources.
 - [x] Защита destructive-операций от молчаливой потери glTF attributes.
-- [ ] Полноценный animation clip import/export/project/history pipeline. До его реализации анимированные glTF блокируются на импорте, чтобы не потерять clips при экспорте.
-- [ ] UV-safe Decimate/LOD для текстурированных production mesh.
+- [ ] Timeline/keyframe editor для создания и редактирования animation clips.
+- [ ] Multi-material-aware LOD/Decimate с сохранением geometry groups.
 - [ ] Неразрушающий modifier stack, сохраняемый в `.gluestack`.
-- [ ] Multi-material editing по material slots.
 - [ ] Texture Paint для Normal / Roughness / Metallic / Emissive.
 - [ ] Улучшенные UV unwrap/packing алгоритмы для сложных production mesh.
 - [ ] Расширенная оптимизация GLB и runtime LOD policy.
