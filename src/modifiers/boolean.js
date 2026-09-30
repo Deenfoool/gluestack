@@ -14,9 +14,19 @@ const OPERATIONS = {
   difference: SUBTRACTION,
   intersect: INTERSECTION,
 };
+const BOOLEAN_ATTRIBUTES = new Set(['position', 'normal', 'uv']);
 
 function isRegularMesh(object) {
   return object?.isMesh && !object.isSkinnedMesh && object.geometry?.getAttribute('position');
+}
+
+function unsupportedAttributes(mesh) {
+  return Object.keys(mesh.geometry?.attributes ?? {}).filter((name) => !BOOLEAN_ATTRIBUTES.has(name));
+}
+
+function hasMorphData(mesh) {
+  if (mesh.morphTargetInfluences?.length) return true;
+  return Object.values(mesh.geometry?.morphAttributes ?? {}).some((attributes) => attributes?.length);
 }
 
 function isWatertight(mesh) {
@@ -28,9 +38,6 @@ function prepareGeometry(mesh) {
   mesh.updateWorldMatrix(true, false);
   let geometry = mesh.geometry.clone();
   geometry.applyMatrix4(mesh.matrixWorld);
-  for (const name of Object.keys(geometry.attributes)) {
-    if (!['position', 'normal', 'uv'].includes(name)) geometry.deleteAttribute(name);
-  }
   if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
   if (!geometry.getAttribute('uv')) {
     const count = geometry.getAttribute('position').count;
@@ -76,6 +83,15 @@ export function applyBoolean(modifiers, operation = 'difference') {
   if (!OPERATIONS[operation]) return false;
   if (Array.isArray(active.material) || Array.isArray(operand.material)) {
     modifiers.onStatus('Boolean: multi-material Mesh пока не поддерживается');
+    return false;
+  }
+  if (hasMorphData(active) || hasMorphData(operand)) {
+    modifiers.onStatus('Boolean: morph targets не поддерживаются без потери данных');
+    return false;
+  }
+  const unsupported = [...new Set([...unsupportedAttributes(active), ...unsupportedAttributes(operand)])];
+  if (unsupported.length) {
+    modifiers.onStatus(`Boolean отменён: будут потеряны атрибуты ${unsupported.join(', ')}`);
     return false;
   }
   if (!isWatertight(active) || !isWatertight(operand)) {
