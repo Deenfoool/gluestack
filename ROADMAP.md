@@ -27,8 +27,7 @@
 - [x] Recalculate / Flip Normals.
 - [x] Bevel Face (базовый) и Dissolve Vertex / Edge.
 - [x] Loop Cut по quad-strip.
-- [x] Knife Center Cut (MVP).
-- [ ] Интерактивный Knife по произвольному сегменту/траектории.
+- [x] Интерактивный Knife: сегмент между двумя точками на граничных рёбрах одной грани.
 - [ ] Улучшить операции topology-editing с сохранением дополнительных custom vertex attributes импортированных GLB.
 
 ## Этап 3 — Modifiers
