@@ -47,6 +47,7 @@ export function bindModifierControls(modifiers, root = document) {
       modifiers.onStatus(`Modifier Stack недоступен: ${error.message || error}`);
       return null;
     });
+  modifiers.editor.modifierStackReady = modifiers.stackReady;
 
   root.querySelectorAll('[data-modifier-mirror]').forEach((button) => {
     button.addEventListener('click', async () => stackAdd(
