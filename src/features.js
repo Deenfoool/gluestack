@@ -28,7 +28,7 @@ export function installFeatures({ editor, editMode, knifeTool, requestNumber }) 
   const materials = safeInstall(editor, 'Materials', () => installMaterialPanel({ editor }));
   const projects = safeInstall(editor, 'Projects', () => installProjects({ editor, editMode, knifeTool }));
   const gameReady = safeInstall(editor, 'Game Ready', () => installGameReady({ editor }));
-  const integrity = safeInstall(editor, 'Data integrity', () => installDataIntegrity({ editor, gameReady }));
+  const integrity = safeInstall(editor, 'Data integrity', () => installDataIntegrity({ editor, editMode, gameReady }));
   const paint = safeInstall(editor, 'Texture Paint', () => installTexturePaint({ editor, editMode, knifeTool }));
   const procedural = safeInstall(editor, 'Procedural', () => installProceduralGenerators({ editor }));
   const scene = safeInstall(editor, 'Scene controls', () => installSceneControls({ editor }));
