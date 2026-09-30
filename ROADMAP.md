@@ -41,7 +41,7 @@
 - [x] Decimate через Three.js r180 SimplifyModifier + Triangulate / Normalize.
 - [x] Boolean Union / Difference / Intersect для watertight/two-manifold Mesh через three-bvh-csg. Cutter сохраняется.
 
-Модификаторы на текущем этапе применяются destructive-операцией с общей Undo/Redo историей. QA-защита блокирует операции, если текущая реализация потеряет custom attributes, morph data или material groups. Для Decimate r180 безопасно сохраняются `position`, `uv`, `normal`, `tangent`, `color`; `uv1+`, skin/custom attributes и multi-material groups блокируются.
+Модификаторы на текущем этапе применяются destructive-операцией с общей Undo/Redo историей. QA-защита блокирует операции, если текущая реализация потеряет custom attributes или morph data. Decimate использует общий group-preserving simplification pipeline: geometry groups и их `materialIndex` сохраняются для multi-material Mesh. Поддерживаемые атрибуты: `position`, `uv`, `normal`, `tangent`, `color`; `uv1+`, skin/custom attributes блокируются.
 
 ## Этап 4 — UV Editing
 - [x] Отдельный workspace UV Editing с UV canvas и существующим Three.js viewport без второго renderer.
@@ -81,10 +81,11 @@ UV Editing работает непосредственно с `geometry.attribut
 - [x] Проверка missing normals, non-unit scale, пустых meshes, NaN/Infinity и слишком крупных текстур.
 - [x] Optimize Scene: merge compatible vertices, сохранение валидных normals и dedup эквивалентных материалов.
 - [x] Генерация LOD0/LOD1/LOD2 и расчёт реального размера итогового `.glb` через `GLTFExporter`.
-- [x] UV-safe LOD/Decimate для single-material Mesh с атрибутами, поддерживаемыми Three.js r180 SimplifyModifier (`position`, `uv`, `normal`, `tangent`, `color`).
+- [x] UV-safe LOD/Decimate с атрибутами, поддерживаемыми Three.js r180 SimplifyModifier (`position`, `uv`, `normal`, `tangent`, `color`).
+- [x] Multi-material-aware LOD/Decimate: simplification выполняется по geometry groups с восстановлением исходных `materialIndex` после merge.
 - [x] Diagnostics проверяет GLB export→parse, UV/PBR/material groups/texture slots/extras, animation clips/tracks и `.gluestack` metadata/payload.
 
-LOD-уровни получают `userData.gluestackLOD`; LOD1/LOD2 скрываются во viewport, но остаются в сцене. Multi-material groups, morph targets и неподдерживаемые custom attributes по-прежнему блокируются до отдельного simplification pipeline.
+LOD-уровни получают `userData.gluestackLOD`; LOD1/LOD2 скрываются во viewport, но остаются в сцене. Morph targets, InstancedMesh и неподдерживаемые custom attributes по-прежнему блокируются до специализированных pipeline.
 
 ## Этап 8 — расширение
 - [x] Texture Paint по Base Color прямо на 3D-модели через raycast + UV; настройки Color / Size / Strength.
@@ -103,7 +104,7 @@ Animation pipeline сохраняет и проигрывает clips и теп�
 - [x] Safe disposal shared geometry/material/texture resources.
 - [x] Защита destructive-операций от молчаливой потери glTF attributes.
 - [ ] Advanced animation editor: Dope Sheet, удаление/перемещение отдельных keyframes, interpolation/easing.
-- [ ] Multi-material-aware LOD/Decimate с сохранением geometry groups.
+- [x] Multi-material-aware LOD/Decimate с сохранением geometry groups.
 - [ ] Неразрушающий modifier stack, сохраняемый в `.gluestack`.
 - [ ] Texture Paint для Normal / Roughness / Metallic / Emissive.
 - [ ] Улучшенные UV unwrap/packing алгоритмы для сложных production mesh.
