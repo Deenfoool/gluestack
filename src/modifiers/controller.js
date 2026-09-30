@@ -53,6 +53,10 @@ export class ModifierController {
       this.onStatus('Modifier: выберите обычный Mesh');
       return null;
     }
+    if (mesh.isInstancedMesh) {
+      this.onStatus('Modifier отменён: InstancedMesh требует отдельного instance-aware pipeline');
+      return null;
+    }
     if (hasMorphData(mesh)) {
       this.onStatus('Modifier отменён: morph targets пока не поддерживаются без потери данных');
       return null;
