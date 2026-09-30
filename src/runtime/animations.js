@@ -13,6 +13,10 @@ function uniqueClipName(existing, base = 'Animation') {
   return candidate;
 }
 
+function cloneClips(clips = []) {
+  return clips.filter((clip) => clip?.isAnimationClip).map((clip) => clip.clone());
+}
+
 export function installAnimations(editor) {
   if (!editor || editor.__gluestackAnimations) return editor.__gluestackAnimations ?? null;
 
@@ -45,6 +49,10 @@ export function installAnimations(editor) {
     editor.events.onTransform(editor.selected);
   };
 
+  const emitChanged = () => {
+    window.dispatchEvent(new CustomEvent('gluestack:animations-changed', { detail: { clips: editor.animations } }));
+  };
+
   const tick = (now) => {
     const delta = Math.min(0.1, Math.max(0, (now - lastTime) / 1000));
     lastTime = now;
@@ -63,14 +71,14 @@ export function installAnimations(editor) {
     }
     editor.animations = next;
     resetMixer();
-    window.dispatchEvent(new CustomEvent('gluestack:animations-changed', { detail: { clips: editor.animations } }));
+    emitChanged();
     return editor.animations;
   };
 
   editor.clearAnimations = () => {
     editor.animations = [];
     resetMixer();
-    window.dispatchEvent(new CustomEvent('gluestack:animations-changed', { detail: { clips: editor.animations } }));
+    emitChanged();
   };
 
   editor.playAnimation = (clipOrIndex = 0) => {
@@ -90,6 +98,18 @@ export function installAnimations(editor) {
   editor.stopAnimation = () => {
     resetMixer();
     editor.events.onStatus('Animation stopped');
+  };
+
+  const originalCaptureState = editor.captureState.bind(editor);
+  editor.captureState = () => ({
+    ...originalCaptureState(),
+    animations: cloneClips(editor.animations),
+  });
+
+  const originalRestoreState = editor.restoreState.bind(editor);
+  editor.restoreState = (state) => {
+    originalRestoreState(state);
+    editor.registerAnimations(state?.animations ?? [], { replace: true });
   };
 
   const originalNewScene = editor.newScene.bind(editor);
