@@ -52,5 +52,9 @@ export function installFeatures({ editor, editMode, knifeTool, requestNumber }) 
   const hardening = safeInstall(editor, 'Runtime hardening', () => installRuntimeHardening({ editor, projects, editMode }));
   const installed = { uv, materials, projects, gameReady, paint, procedural, scene, hardening, resources, importer, integrity, viewportHistory, animations };
   const diagnostics = safeInstall(editor, 'Diagnostics', () => installDiagnostics({ editor, projects, features: installed }));
-  return { ...installed, diagnostics };
+  const result = { ...installed, diagnostics };
+  const failed = Object.entries(result).filter(([, value]) => !value).map(([name]) => name);
+  if (failed.length) editor.events.onStatus(`Базовый редактор готов · не загрузились: ${failed.join(', ')}`);
+  else editor.events.onStatus('Готово · все дополнительные модули подключены');
+  return result;
 }
