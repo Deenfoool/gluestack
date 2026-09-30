@@ -141,7 +141,7 @@ window.__gluestackFeatureBootstrapError = null;
 async function bootstrapOptionalFeatures() {
   try {
     const { installFeatures } = await import('./features.js');
-    const features = installFeatures({ editor, editMode, knifeTool, requestNumber }) ?? {};
+    const features = await installFeatures({ editor, editMode, knifeTool, requestNumber }) ?? {};
     window.__gluestackFeatures = features;
     window.__gluestackFeatureBootstrapError = null;
     scheduleRefresh();
