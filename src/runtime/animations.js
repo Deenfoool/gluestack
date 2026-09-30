@@ -17,6 +17,31 @@ function cloneClips(clips = []) {
   return clips.filter((clip) => clip?.isAnimationClip).map((clip) => clip.clone());
 }
 
+function trackTargetsName(trackName, name) {
+  if (!trackName || !name) return false;
+  return trackName === name
+    || trackName.startsWith(`${name}.`)
+    || trackName.includes(`.bones[${name}]`)
+    || trackName.startsWith(`bones[${name}]`);
+}
+
+function retargetTrackName(trackName, oldName, newName) {
+  let next = trackName;
+  if (next === oldName) next = newName;
+  else if (next.startsWith(`${oldName}.`)) next = `${newName}${next.slice(oldName.length)}`;
+  next = next.split(`.bones[${oldName}]`).join(`.bones[${newName}]`);
+  if (next.startsWith(`bones[${oldName}]`)) next = `bones[${newName}]${next.slice(`bones[${oldName}]`.length)}`;
+  return next;
+}
+
+function namesIn(objects = []) {
+  const names = new Set();
+  for (const root of objects) {
+    root?.traverse?.((object) => { if (object.name) names.add(object.name); });
+  }
+  return names;
+}
+
 export function installAnimations(editor) {
   if (!editor || editor.__gluestackAnimations) return editor.__gluestackAnimations ?? null;
 
@@ -51,6 +76,34 @@ export function installAnimations(editor) {
 
   const emitChanged = () => {
     window.dispatchEvent(new CustomEvent('gluestack:animations-changed', { detail: { clips: editor.animations } }));
+  };
+
+  const pruneMissingTargets = (candidateNames) => {
+    if (!candidateNames?.size || !editor.animations.length) return 0;
+    const liveNames = namesIn([editor.modelRoot]);
+    const removedNames = [...candidateNames].filter((name) => !liveNames.has(name));
+    if (!removedNames.length) return 0;
+    let removedTracks = 0;
+    const clips = [];
+    for (const clip of editor.animations) {
+      const next = clip.clone();
+      next.tracks = next.tracks.filter((track) => {
+        const remove = removedNames.some((name) => trackTargetsName(track.name, name));
+        if (remove) removedTracks += 1;
+        return !remove;
+      });
+      if (next.tracks.length) {
+        next.resetDuration();
+        clips.push(next);
+      }
+    }
+    if (removedTracks) {
+      editor.animations = clips;
+      resetMixer();
+      emitChanged();
+      editor.events.onStatus(`Animation: удалено ${removedTracks} track(s) для удалённых узлов`);
+    }
+    return removedTracks;
   };
 
   const tick = (now) => {
@@ -112,12 +165,64 @@ export function installAnimations(editor) {
     editor.registerAnimations(state?.animations ?? [], { replace: true });
   };
 
+  const originalRenameSelected = editor.renameSelected.bind(editor);
+  editor.renameSelected = (name) => {
+    const object = editor.selected;
+    const oldName = object?.name ?? '';
+    originalRenameSelected(name);
+    const newName = object?.name ?? '';
+    if (!oldName || !newName || oldName === newName || !editor.animations.length) return;
+    let changed = 0;
+    for (const clip of editor.animations) {
+      for (const track of clip.tracks) {
+        const next = retargetTrackName(track.name, oldName, newName);
+        if (next !== track.name) {
+          track.name = next;
+          changed += 1;
+        }
+      }
+    }
+    if (changed) {
+      resetMixer();
+      emitChanged();
+      editor.events.onStatus(`Animation: ${changed} track(s) retargeted ${oldName} → ${newName}`);
+    }
+  };
+
+  const originalDeleteSelected = editor.deleteSelected.bind(editor);
+  editor.deleteSelected = (...args) => {
+    const names = namesIn(editor.getTopLevelSelection());
+    const result = originalDeleteSelected(...args);
+    pruneMissingTargets(names);
+    return result;
+  };
+
+  const originalJoinSelected = editor.joinSelected.bind(editor);
+  editor.joinSelected = (...args) => {
+    const names = namesIn(editor.getTopLevelSelection());
+    const result = originalJoinSelected(...args);
+    if (result !== false) pruneMissingTargets(names);
+    return result;
+  };
+
+  const originalSeparateSelected = editor.separateSelected.bind(editor);
+  editor.separateSelected = (...args) => {
+    const names = namesIn(editor.selected ? [editor.selected] : []);
+    const result = originalSeparateSelected(...args);
+    if (result !== false) pruneMissingTargets(names);
+    return result;
+  };
+
   const originalNewScene = editor.newScene.bind(editor);
   editor.newScene = (...args) => {
     const result = originalNewScene(...args);
     editor.clearAnimations();
     return result;
   };
+
+  editor.transform.addEventListener('mouseDown', () => {
+    if (activeAction) resetMixer();
+  });
 
   const bar = document.querySelector('.main-menu-bar');
   const spacer = bar?.querySelector('.main-menu-spacer');
@@ -180,6 +285,7 @@ export function installAnimations(editor) {
     menu,
     get clips() { return editor.animations; },
     get activeClip() { return activeClip; },
+    pruneMissingTargets,
     dispose() {
       cancelAnimationFrame(raf);
       resetMixer();
