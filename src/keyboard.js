@@ -1,3 +1,7 @@
+import { bevelFace } from './edit/bevel.js';
+import { dissolveSelected } from './edit/dissolve.js';
+import { knifeCenter, loopCut } from './edit/cuts.js';
+
 export function bindKeyboard({ editor, editMode, transformModal, snapButton, openAddMenu, requestNumber }) {
   window.addEventListener('keydown', (event) => {
     const target = event.target;
@@ -36,6 +40,21 @@ export function bindKeyboard({ editor, editMode, transformModal, snapButton, ope
       if (event.code === 'Digit3') { event.preventDefault(); editMode.setSelectionMode('face'); return; }
       if (event.code === 'KeyA' && event.altKey) { event.preventDefault(); editMode.deselectAll(); return; }
       if (event.code === 'KeyA' && !commandKey) { event.preventDefault(); editMode.selectAll(); return; }
+      if (commandKey && event.code === 'KeyB') {
+        event.preventDefault();
+        const factor = requestNumber('Bevel factor (0..0.5)', 0.12, { min: 0.001, max: 0.499 });
+        if (factor === null) return;
+        const depth = requestNumber('Bevel depth', 0.08);
+        if (depth !== null) bevelFace(editMode, factor, depth);
+        return;
+      }
+      if (commandKey && event.code === 'KeyX') { event.preventDefault(); dissolveSelected(editMode); return; }
+      if (commandKey && event.code === 'KeyR') {
+        event.preventDefault();
+        const factor = requestNumber('Loop Cut factor (0..1)', 0.5, { min: 0.001, max: 0.999 });
+        if (factor !== null) loopCut(editMode, factor);
+        return;
+      }
       if (event.code === 'KeyE') {
         event.preventDefault();
         const value = requestNumber('Extrude distance', 0.25);
@@ -50,6 +69,7 @@ export function bindKeyboard({ editor, editMode, transformModal, snapButton, ope
       }
       if (event.code === 'KeyM') { event.preventDefault(); editMode.mergeSelected(); return; }
       if (event.code === 'KeyF') { event.preventDefault(); editMode.fillSelected(); return; }
+      if (event.code === 'KeyK') { event.preventDefault(); knifeCenter(editMode); return; }
       if (event.shiftKey && event.code === 'KeyN') { event.preventDefault(); editMode.recalculateNormals(); return; }
       if (event.code === 'KeyX' || event.code === 'Delete') { event.preventDefault(); editMode.deleteSelection(); return; }
       if (commandKey || event.altKey) return;
