@@ -1,13 +1,16 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { SimplifyModifier } from 'three/addons/modifiers/SimplifyModifier.js';
 import {
   disposeGeometryIfUnreferenced,
   disposeMaterialIfUnreferenced,
 } from '../runtime/resource-ownership.js';
+import {
+  SIMPLIFY_SAFE_ATTRIBUTES,
+  simplifyCompatibilityIssue,
+  simplifyGeometryPreservingGroups,
+} from '../runtime/simplify-geometry.js';
 
 const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap'];
-const SIMPLIFY_SAFE_ATTRIBUTES = new Set(['position', 'uv', 'normal', 'tangent', 'color']);
 
 function materialsOf(mesh) {
   return Array.isArray(mesh.material) ? mesh.material.filter(Boolean) : mesh.material ? [mesh.material] : [];
@@ -76,7 +79,6 @@ export class GameReadyController {
   constructor(editor, onStatus = null) {
     this.editor = editor;
     this.status = onStatus ?? ((message) => editor.events.onStatus(message));
-    this.simplify = new SimplifyModifier();
   }
 
   analyze() {
@@ -115,8 +117,9 @@ export class GameReadyController {
       if (unsupported.length) {
         result.issues.push({ level: 'warning', object: object.name, message: `LOD/Decimate guard: unsupported attributes ${unsupported.join(', ')}` });
       }
-      if (Array.isArray(object.material) && object.material.length > 1) {
-        result.issues.push({ level: 'warning', object: object.name, message: 'LOD/Decimate guard: multi-material groups require a dedicated simplification pipeline' });
+      const simplifyIssue = simplifyCompatibilityIssue(object);
+      if (simplifyIssue && !hasMorphTargets(object) && !object.isInstancedMesh && !unsupported.length) {
+        result.issues.push({ level: 'warning', object: object.name, message: `LOD/Decimate guard: ${simplifyIssue}` });
       }
       for (let i = 0; i < position.count; i += 1) {
         if (![position.getX(i), position.getY(i), position.getZ(i)].every(Number.isFinite)) {
@@ -216,37 +219,16 @@ export class GameReadyController {
 
   generateLOD(ratios = [0.5, 0.25]) {
     const source = this.editor.selected;
-    if (!source?.isMesh || source.isSkinnedMesh || source.isInstancedMesh || !source.geometry?.getAttribute('position')) {
-      this.status(source?.isInstancedMesh ? 'LOD: InstancedMesh требует отдельного instance-aware pipeline' : 'LOD: выберите обычный Mesh');
-      return false;
-    }
-    if (Array.isArray(source.material) && source.material.length > 1) {
-      this.status('LOD: multi-material Mesh пока не поддерживается — SimplifyModifier r180 не сохраняет geometry groups');
-      return false;
-    }
-    if (hasMorphTargets(source)) {
-      this.status('LOD: morph targets не упрощаются автоматически, чтобы не потерять morph data');
-      return false;
-    }
-    const unsupported = Object.keys(source.geometry.attributes).filter((name) => !SIMPLIFY_SAFE_ATTRIBUTES.has(name));
-    if (unsupported.length) {
-      this.status(`LOD отменён: SimplifyModifier r180 не сохраняет атрибуты ${unsupported.join(', ')}`);
+    const issue = simplifyCompatibilityIssue(source);
+    if (issue) {
+      this.status(`LOD отменён: ${issue}`);
       return false;
     }
     if ((source.userData.gluestackLOD?.level ?? 0) > 0) {
       this.status('LOD: выберите исходный Mesh / LOD0, а не сниженный уровень');
       return false;
     }
-
-    let prepared = source.geometry.clone();
-    if (!prepared.index) {
-      const indexed = mergeVertices(prepared, 1e-5);
-      prepared.dispose();
-      prepared = indexed;
-    }
-    const preparedCount = prepared.getAttribute('position')?.count ?? 0;
-    if (preparedCount < 12) {
-      prepared.dispose();
+    if ((source.geometry.getAttribute('position')?.count ?? 0) < 12) {
       this.status('LOD: mesh слишком маленький для упрощения');
       return false;
     }
@@ -266,17 +248,15 @@ export class GameReadyController {
     source.name = `${baseName}_LOD0`;
     source.userData.gluestackLOD = { level: 0, ratio: 1, group: baseName };
     const generated = [source];
+    let preservedGroups = 0;
 
     for (let index = 0; index < ratios.length; index += 1) {
       const cleanRatio = THREE.MathUtils.clamp(Number(ratios[index]), 0.05, 0.95);
-      let geometry = prepared.clone();
+      let geometry = null;
       try {
-        const count = geometry.getAttribute('position').count;
-        const targetCount = Math.max(4, Math.floor(count * cleanRatio));
-        const remove = Math.max(1, count - targetCount);
-        const simplified = this.simplify.modify(geometry, remove);
-        geometry.dispose();
-        geometry = simplified;
+        const result = simplifyGeometryPreservingGroups(source.geometry, cleanRatio);
+        geometry = result.geometry;
+        preservedGroups = Math.max(preservedGroups, result.groupCount ?? 0);
         if ((geometry.getAttribute('position')?.count ?? 0) < 3) {
           geometry.dispose();
           continue;
@@ -290,6 +270,7 @@ export class GameReadyController {
         console.warn('[gluestack] LOD simplify failed', error);
         continue;
       }
+
       const lod = new THREE.Mesh(geometry, source.material);
       lod.name = `${baseName}_LOD${index + 1}`;
       lod.position.copy(source.position);
@@ -301,7 +282,6 @@ export class GameReadyController {
       parent.add(lod);
       generated.push(lod);
     }
-    prepared.dispose();
 
     this.editor.select(source);
     this.editor.events.onStructure();
@@ -310,7 +290,8 @@ export class GameReadyController {
       return false;
     }
     const uvKept = generated.slice(1).every((mesh) => Boolean(mesh.geometry.getAttribute('uv'))) && Boolean(source.geometry.getAttribute('uv'));
-    this.status(`LOD создан: ${generated.map((mesh) => mesh.name).join(', ')}${uvKept ? ' · UV сохранён' : ''}`);
+    const groupLabel = preservedGroups ? ` · material groups ${preservedGroups}` : '';
+    this.status(`LOD создан: ${generated.map((mesh) => mesh.name).join(', ')}${uvKept ? ' · UV сохранён' : ''}${groupLabel}`);
     return true;
   }
 }
