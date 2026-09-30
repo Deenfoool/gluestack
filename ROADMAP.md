@@ -70,10 +70,12 @@ UV Editing работает непосредственно с `geometry.attribut
 Один и тот же project container используется для скачиваемого файла и IndexedDB, поэтому локальный snapshot и файл проекта не расходятся по формату. Текстуры хранятся внутри вложенного GLB.
 
 ## Этап 7 — Game Ready
-- [ ] Статистика vertices / triangles / materials / textures.
-- [ ] Проверка normals, transforms и пустых meshes.
-- [ ] Оптимизация геометрии и материалов.
-- [ ] LOD и контроль размера итогового `.glb`.
+- [x] Статистика meshes / vertices / triangles / materials / textures и оценка texture RAM.
+- [x] Проверка missing normals, non-unit scale, пустых meshes, NaN/Infinity и слишком крупных текстур.
+- [x] Optimize Scene: merge compatible vertices, recalculated normals и dedup эквивалентных материалов.
+- [x] Генерация LOD0/LOD1/LOD2 и расчёт реального размера итогового `.glb` через `GLTFExporter`.
+
+LOD-уровни получают `userData.gluestackLOD`; LOD1/LOD2 скрываются во viewport, но остаются в сцене и экспортируются для дальнейшего выбора игровым runtime.
 
 ## Этап 8 — расширение
 - [ ] Texture Paint.
