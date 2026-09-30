@@ -1,4 +1,4 @@
-const TEXTURE_SLOTS = [
+export const TEXTURE_SLOTS = [
   'map', 'alphaMap', 'aoMap', 'bumpMap', 'normalMap', 'displacementMap',
   'emissiveMap', 'metalnessMap', 'roughnessMap', 'lightMap', 'envMap',
   'clearcoatMap', 'clearcoatNormalMap', 'clearcoatRoughnessMap',
@@ -14,7 +14,7 @@ function collectMaterialTextures(material, target) {
   }
 }
 
-function collectReferencedResources(root) {
+export function collectReferencedResources(root) {
   const geometries = new Set();
   const materials = new Set();
   const textures = new Set();
@@ -29,6 +29,26 @@ function collectReferencedResources(root) {
   });
 
   return { geometries, materials, textures };
+}
+
+export function textureReferencedByScene(editor, texture) {
+  if (!editor?.modelRoot || !texture?.isTexture) return false;
+  let referenced = false;
+  editor.modelRoot.traverse((object) => {
+    if (referenced || !object.material) return;
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of materials) {
+      if (TEXTURE_SLOTS.some((slot) => material?.[slot] === texture)) {
+        referenced = true;
+        break;
+      }
+    }
+  });
+  return referenced;
+}
+
+export function disposeTextureIfUnreferenced(editor, texture) {
+  if (texture?.isTexture && !textureReferencedByScene(editor, texture)) texture.dispose?.();
 }
 
 export function installResourceOwnership(editor) {
@@ -52,5 +72,5 @@ export function installResourceOwnership(editor) {
     }
   };
 
-  return { collectReferencedResources };
+  return { collectReferencedResources, disposeTextureIfUnreferenced };
 }
