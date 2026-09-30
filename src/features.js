@@ -24,6 +24,13 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     ({ installAnimations }) => installAnimations(editor),
   );
 
+  const animationEditor = await loadAndInstall(
+    editor,
+    'Animation editor',
+    () => import('./runtime/animation-editor.js'),
+    ({ installAnimationEditor }) => installAnimationEditor(editor),
+  );
+
   const importer = await loadAndInstall(
     editor,
     'GLTF importer',
@@ -127,6 +134,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     integrity,
     viewportHistory,
     animations,
+    animationEditor,
   };
 
   const diagnostics = await loadAndInstall(
