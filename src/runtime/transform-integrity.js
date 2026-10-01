@@ -74,8 +74,6 @@ export function installTransformIntegrity(editor) {
     if (!dragState || dragState.object !== editor.transform.object) return;
     preserveUnaffectedComponents(dragState.object, dragState.snapshot, dragState.mode);
     editor.updateSelectionBoxes();
-    // The base TransformControls listener fires before this guard. Emit the corrected
-    // state once more so Inspector/autosave always see the final transform values.
     editor.events.onTransform(dragState.object);
   }
 
@@ -94,8 +92,6 @@ export function installTransformIntegrity(editor) {
     const snapshot = isObjectTransformTarget(object) ? snapshotTransform(object) : null;
     originalSetTransformMode(mode);
     if (snapshot && isObjectTransformTarget(object)) {
-      // Switching tools is not a scene edit. Re-apply the exact current transform,
-      // but do not emit onTransform/dirty-state events just for changing the gizmo.
       restoreAll(object, snapshot);
       editor.updateSelectionBoxes();
     }
@@ -142,11 +138,21 @@ export function installTransformIntegrity(editor) {
 
     return {
       ok: rotateNeutral && rotateGuard && scaleGuard && moveGuard,
-      detail: `mode-neutral ${rotateNeutral ? 'PASS' : 'FAIL'} · rotate→scale ${rotateGuard ? 'PASS' : 'FAIL'} · scale→rotation ${scaleGuard ? 'PASS' : 'FAIL'} · move preserves both ${moveGuard ? 'PASS' : 'FAIL'}`,
+      detail: `mode-neutral ${rotateNeutral ? 'PASS' : 'FAIL'} · rotate preserves scale ${rotateGuard ? 'PASS' : 'FAIL'} · scale preserves rotation ${scaleGuard ? 'PASS' : 'FAIL'} · move preserves both ${moveGuard ? 'PASS' : 'FAIL'}`,
     };
   }
 
-  const api = { runSelfTest };
+  function run() {
+    const result = runSelfTest();
+    return [{
+      name: 'Transform mode integrity',
+      ok: result.ok,
+      level: result.ok ? 'pass' : 'fail',
+      detail: result.detail,
+    }];
+  }
+
+  const api = { runSelfTest, run };
   editor.__gluestackTransformIntegrity = api;
   return api;
 }
