@@ -16,18 +16,43 @@ export function installProjects({ editor, editMode, knifeTool }) {
 
   const separator = document.createElement('div');
   separator.className = 'menu-separator';
-  const save = menuButton('save', 'save', 'Save Project…', 'Ctrl Shift S');
+  const save = menuButton('save', 'save', 'Save Project', 'Ctrl S');
+  const saveAs = menuButton('save-as', 'download', 'Save Project As…', 'Ctrl Shift S');
   const open = menuButton('open', 'folder-open', 'Open Project…');
-  const saveLocal = menuButton('save-local', 'database', 'Save Local Snapshot…');
   const openLocal = menuButton('open-local', 'database-zap', 'Open Local Project…');
   const recover = menuButton('recover', 'history', 'Recover Autosave');
-  menu.append(separator, save, open, saveLocal, openLocal, recover);
+  const recoverBackup = menuButton('recover-backup', 'history-restore', 'Recover Previous Autosave');
+  menu.append(separator, save, saveAs, open, openLocal, recover, recoverBackup);
 
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.gluestack,application/octet-stream';
   input.hidden = true;
   document.body.appendChild(input);
+
+  const baseTitle = document.title.replace(/^\*\s*/, '');
+  const menuBar = document.querySelector('.main-menu-bar');
+  const buildLabel = menuBar?.querySelector('.build-label');
+  const dirtyIndicator = document.createElement('span');
+  dirtyIndicator.className = 'project-dirty-indicator';
+  dirtyIndicator.title = 'Есть несохранённые изменения';
+  dirtyIndicator.hidden = true;
+  dirtyIndicator.textContent = '● Unsaved';
+  if (menuBar) menuBar.insertBefore(dirtyIndicator, buildLabel ?? null);
+
+  const style = document.createElement('style');
+  style.textContent = `
+    .project-dirty-indicator{font-size:10px;color:#e1a14a;padding:2px 6px;border:1px solid rgba(225,161,74,.35);border-radius:3px;background:rgba(225,161,74,.08);white-space:nowrap}
+    .project-dirty-indicator[hidden]{display:none}`;
+  document.head.appendChild(style);
+
+  function updateDirtyUI() {
+    dirtyIndicator.hidden = !projects.dirty;
+    document.title = projects.dirty ? `* ${baseTitle}` : baseTitle;
+  }
+
+  window.addEventListener('gluestack:project-dirty', updateDirtyUI);
+  updateDirtyUI();
 
   async function leaveEdit() {
     knifeTool.cancel(true);
@@ -41,16 +66,34 @@ export function installProjects({ editor, editMode, knifeTool }) {
     editor.emitHistory();
   }
 
+  async function quickSave() {
+    let name = projects.name;
+    if (!name || name === 'Untitled') {
+      const answer = window.prompt('Project name', name || 'Untitled');
+      if (answer === null) return false;
+      name = answer;
+    }
+    await projects.saveLocal(name);
+    updateDirtyUI();
+    return true;
+  }
+
+  async function saveAsDownload() {
+    const answer = window.prompt('Project name', projects.name || 'Untitled');
+    if (answer === null) return false;
+    await projects.saveDownload(answer);
+    updateDirtyUI();
+    return true;
+  }
+
   async function run(action) {
     try {
       if (action === 'save') {
-        const name = window.prompt('Project name', projects.name);
-        if (name !== null) await projects.saveDownload(name);
+        await quickSave();
+      } else if (action === 'save-as') {
+        await saveAsDownload();
       } else if (action === 'open') {
         input.click();
-      } else if (action === 'save-local') {
-        const name = window.prompt('Local project name', projects.name);
-        if (name !== null) await projects.saveLocal(name);
       } else if (action === 'open-local') {
         const list = await projects.listProjects();
         if (!list.length) throw new Error('Локальных проектов пока нет');
@@ -62,10 +105,12 @@ export function installProjects({ editor, editMode, knifeTool }) {
         await leaveEdit();
         await projects.openLocal(list[index].id);
         resetHistory();
-      } else if (action === 'recover') {
+        updateDirtyUI();
+      } else if (action === 'recover' || action === 'recover-backup') {
         await leaveEdit();
-        await projects.recoverAutosave();
+        await projects.recoverAutosave({ backup: action === 'recover-backup' });
         resetHistory();
+        updateDirtyUI();
       }
     } catch (error) {
       console.error(error);
@@ -73,7 +118,7 @@ export function installProjects({ editor, editMode, knifeTool }) {
     }
   }
 
-  [save, open, saveLocal, openLocal, recover].forEach((button) => {
+  [save, saveAs, open, openLocal, recover, recoverBackup].forEach((button) => {
     button.addEventListener('click', () => {
       document.querySelector('#file-menu')?.removeAttribute('open');
       run(button.dataset.projectAction);
@@ -87,6 +132,7 @@ export function installProjects({ editor, editMode, knifeTool }) {
       await leaveEdit();
       await projects.openProjectBuffer(await file.arrayBuffer());
       resetHistory();
+      updateDirtyUI();
     } catch (error) {
       console.error(error);
       editor.events.onStatus(`Open project: ${error.message || error}`);
@@ -95,29 +141,43 @@ export function installProjects({ editor, editMode, knifeTool }) {
     }
   });
 
-  const schedule = () => projects.scheduleAutosave();
-  const previousStructure = editor.events.onStructure;
-  editor.events.onStructure = (...args) => { previousStructure(...args); schedule(); };
-  const previousTransform = editor.events.onTransform;
-  editor.events.onTransform = (...args) => { previousTransform(...args); schedule(); };
-  const previousHistory = editor.events.onHistory;
-  editor.events.onHistory = (...args) => { previousHistory(...args); schedule(); };
+  const schedule = (reason = 'change') => {
+    projects.markDirty(reason);
+    projects.scheduleAutosave();
+    updateDirtyUI();
+  };
 
-  document.addEventListener('change', schedule, true);
-  document.addEventListener('pointerup', (event) => {
-    if (event.target.closest?.('#viewport, #uv-canvas, .properties-content')) schedule();
+  const previousStructure = editor.events.onStructure;
+  editor.events.onStructure = (...args) => { previousStructure(...args); schedule('structure'); };
+  const previousTransform = editor.events.onTransform;
+  editor.events.onTransform = (...args) => { previousTransform(...args); schedule('transform'); };
+  const previousHistory = editor.events.onHistory;
+  editor.events.onHistory = (...args) => { previousHistory(...args); schedule('history'); };
+  const previousSelection = editor.events.onSelection;
+  editor.events.onSelection = (...args) => { previousSelection(...args); schedule('selection'); };
+
+  document.addEventListener('change', (event) => {
+    if (event.target === input) return;
+    schedule('ui-change');
   }, true);
-  window.addEventListener('beforeunload', () => {
+  document.addEventListener('pointerup', (event) => {
+    if (event.target.closest?.('#viewport, #uv-canvas')) schedule('viewport');
+  }, true);
+
+  window.addEventListener('beforeunload', (event) => {
     clearTimeout(projects.autosaveTimer);
+    if (!projects.dirty) return;
+    event.preventDefault();
+    event.returnValue = '';
   });
+
   window.addEventListener('keydown', (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyS') {
-      event.preventDefault();
-      run('save');
-    }
+    if (!(event.ctrlKey || event.metaKey) || event.code !== 'KeyS') return;
+    event.preventDefault();
+    if (event.shiftKey) run('save-as');
+    else run('save');
   }, { capture: true });
 
   refreshIcons();
-  setTimeout(() => projects.scheduleAutosave(), 1000);
   return projects;
 }
