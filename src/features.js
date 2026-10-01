@@ -141,6 +141,13 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     ({ installGameReady }) => installGameReady({ editor }),
   );
 
+  const gameReadyValidator = await loadAndInstall(
+    editor,
+    'Game Ready validator v2',
+    () => import('./game-ready/validator-v2.js'),
+    ({ installGameReadyValidatorV2 }) => installGameReadyValidatorV2({ editor, gameReady }),
+  );
+
   const integrity = await loadAndInstall(
     editor,
     'Data integrity',
@@ -206,6 +213,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     materials,
     projects,
     gameReady,
+    gameReadyValidator,
     paint,
     procedural,
     scene,
