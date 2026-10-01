@@ -94,11 +94,10 @@ export function installTransformIntegrity(editor) {
     const snapshot = isObjectTransformTarget(object) ? snapshotTransform(object) : null;
     originalSetTransformMode(mode);
     if (snapshot && isObjectTransformTarget(object)) {
-      // Mode switches must be transform-neutral even if TransformControls internals
-      // change in a future Three.js release.
+      // Switching tools is not a scene edit. Re-apply the exact current transform,
+      // but do not emit onTransform/dirty-state events just for changing the gizmo.
       restoreAll(object, snapshot);
       editor.updateSelectionBoxes();
-      editor.events.onTransform(object);
     }
   };
 
@@ -108,43 +107,43 @@ export function installTransformIntegrity(editor) {
       return { ok: false, detail: 'select an object first' };
     }
 
-    const original = snapshotTransform(object);
     const originalMode = editor.transform.mode;
-    try {
-      object.position.set(1.25, -2.5, 3.75);
-      object.quaternion.setFromEuler({ x: 0.31, y: -0.47, z: 0.22, order: 'XYZ', isEuler: true });
-      object.scale.set(2.2, 0.7, 1.4);
-      object.updateMatrix();
-      const baseline = snapshotTransform(object);
+    const actualBefore = snapshotTransform(object);
+    originalSetTransformMode('rotate');
+    const rotateNeutral = vectorEqual(object.position, actualBefore.position)
+      && quaternionEqual(object.quaternion, actualBefore.quaternion)
+      && vectorEqual(object.scale, actualBefore.scale);
+    originalSetTransformMode(originalMode);
 
-      editor.setTransformMode('rotate');
-      const rotateNeutral = vectorEqual(object.scale, baseline.scale) && vectorEqual(object.position, baseline.position);
+    const test = object.clone(false);
+    test.position.set(1.25, -2.5, 3.75);
+    test.rotation.set(0.31, -0.47, 0.22);
+    test.scale.set(2.2, 0.7, 1.4);
+    test.updateMatrix();
+    const baseline = snapshotTransform(test);
 
-      beginDrag();
-      object.scale.set(1, 1, 1);
-      enforceDragIntegrity();
-      const rotateGuard = vectorEqual(object.scale, baseline.scale);
-      dragState = null;
+    test.scale.set(1, 1, 1);
+    preserveUnaffectedComponents(test, baseline, 'rotate');
+    const rotateGuard = vectorEqual(test.scale, baseline.scale)
+      && vectorEqual(test.position, baseline.position);
 
-      editor.setTransformMode('scale');
-      const scaleModeBaseline = snapshotTransform(object);
-      beginDrag();
-      object.quaternion.identity();
-      enforceDragIntegrity();
-      const scaleGuard = quaternionEqual(object.quaternion, scaleModeBaseline.quaternion);
-      dragState = null;
+    restoreAll(test, baseline);
+    test.quaternion.identity();
+    preserveUnaffectedComponents(test, baseline, 'scale');
+    const scaleGuard = quaternionEqual(test.quaternion, baseline.quaternion)
+      && vectorEqual(test.position, baseline.position);
 
-      return {
-        ok: rotateNeutral && rotateGuard && scaleGuard,
-        detail: `mode-neutral ${rotateNeutral ? 'PASS' : 'FAIL'} · rotate preserves scale ${rotateGuard ? 'PASS' : 'FAIL'} · scale preserves rotation ${scaleGuard ? 'PASS' : 'FAIL'}`,
-      };
-    } finally {
-      restoreAll(object, original);
-      originalSetTransformMode(originalMode);
-      editor.updateSelectionBoxes();
-      editor.events.onTransform(object);
-      dragState = null;
-    }
+    restoreAll(test, baseline);
+    test.quaternion.identity();
+    test.scale.setScalar(0.5);
+    preserveUnaffectedComponents(test, baseline, 'translate');
+    const moveGuard = quaternionEqual(test.quaternion, baseline.quaternion)
+      && vectorEqual(test.scale, baseline.scale);
+
+    return {
+      ok: rotateNeutral && rotateGuard && scaleGuard && moveGuard,
+      detail: `mode-neutral ${rotateNeutral ? 'PASS' : 'FAIL'} · rotate→scale ${rotateGuard ? 'PASS' : 'FAIL'} · scale→rotation ${scaleGuard ? 'PASS' : 'FAIL'} · move preserves both ${moveGuard ? 'PASS' : 'FAIL'}`,
+    };
   }
 
   const api = { runSelfTest };
