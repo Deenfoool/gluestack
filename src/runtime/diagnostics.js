@@ -1,10 +1,15 @@
 import * as THREE from 'three';
+import { CURRENT_PROJECT_VERSION, PROJECT_FORMAT, normalizeProjectMetadata } from '../projects/format.js';
 import { refreshIcons } from '../ui.js';
 
 const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap'];
 
 function result(name, ok, detail = '', level = ok ? 'pass' : 'fail') {
   return { name, ok, detail, level };
+}
+
+function editorMetadataKeys(userData = {}) {
+  return Object.keys(userData).filter((key) => key.startsWith('gluestack') || key.startsWith('__gluestack'));
 }
 
 function sceneSignature(root) {
@@ -17,10 +22,12 @@ function sceneSignature(root) {
     pbrMaterials: 0,
     textureSlots: 0,
     extrasObjects: 0,
+    editorMetadataKeys: 0,
   };
 
   root?.traverse?.((object) => {
     if (object.userData && Object.keys(object.userData).length) signature.extrasObjects += 1;
+    signature.editorMetadataKeys += editorMetadataKeys(object.userData).length;
     if (!object.isMesh) return;
     signature.meshes += 1;
     const position = object.geometry?.getAttribute('position');
@@ -61,7 +68,7 @@ function signatureDetail(before, after) {
     `groups ${before.materialGroups}→${after.materialGroups}`,
     `PBR ${before.pbrMaterials}→${after.pbrMaterials}`,
     `texture slots ${before.textureSlots}→${after.textureSlots}`,
-    `extras ${before.extrasObjects}→${after.extrasObjects}`,
+    `editor keys ${before.editorMetadataKeys}→${after.editorMetadataKeys}`,
   ].join(' · ');
 }
 
@@ -72,8 +79,7 @@ function signatureMatches(before, after) {
     && before.materialGroups === after.materialGroups
     && before.pbrMaterials === after.pbrMaterials
     && before.textureSlots === after.textureSlots
-    && before.uniqueTextures === after.uniqueTextures
-    && before.extrasObjects === after.extrasObjects;
+    && before.uniqueTextures === after.uniqueTextures;
 }
 
 function animationsMatch(before, after) {
@@ -83,6 +89,7 @@ function animationsMatch(before, after) {
 }
 
 async function exportBuffer(editor) {
+  if (editor.exportCleanBuffer) return editor.exportCleanBuffer();
   return new Promise((resolve, reject) => {
     editor.exporter.parse(editor.modelRoot, resolve, reject, {
       binary: true,
@@ -97,6 +104,11 @@ async function parseBuffer(editor, buffer) {
   return new Promise((resolve, reject) => {
     editor.loader.parse(buffer, '', resolve, (error) => reject(error instanceof Error ? error : new Error(String(error))));
   });
+}
+
+function integrityMatches(expected, actual) {
+  const keys = ['meshes', 'materials', 'textures', 'animations', 'modifierStacks'];
+  return keys.every((key) => Number(expected?.[key] ?? -1) === Number(actual?.[key] ?? -2));
 }
 
 export function installDiagnostics({ editor, projects, features = {} }) {
@@ -148,7 +160,10 @@ export function installDiagnostics({ editor, projects, features = {} }) {
     checks.push(result('Renderer', Boolean(editor.renderer?.domElement?.isConnected), editor.renderer?.domElement?.isConnected ? 'WebGL canvas connected' : 'Renderer canvas missing'));
     checks.push(result('Scene root', Boolean(editor.modelRoot?.parent), `${editor.modelRoot?.children?.length ?? 0} top-level object(s)`));
 
-    const requiredFeatures = ['resources', 'animations', 'importer', 'uv', 'materials', 'projects', 'gameReady', 'integrity', 'paint', 'procedural', 'scene', 'hardening', 'viewportHistory'];
+    const requiredFeatures = [
+      'resources', 'animations', 'cleanExport', 'animationEditor', 'dopeSheet', 'importer', 'modifierStack',
+      'uv', 'materials', 'projects', 'gameReady', 'integrity', 'paint', 'procedural', 'scene', 'hardening', 'viewportHistory',
+    ];
     for (const key of requiredFeatures) {
       checks.push(result(`Feature: ${key}`, Boolean(features[key]), features[key] ? 'installed' : 'not installed'));
     }
@@ -176,6 +191,7 @@ export function installDiagnostics({ editor, projects, features = {} }) {
       const animationMatch = animationsMatch(beforeAnimations, afterAnimations);
       checks.push(result('GLB export → parse', after.meshes === before.meshes, `${buffer.byteLength.toLocaleString()} bytes · meshes ${before.meshes} → ${after.meshes}`, after.meshes === before.meshes ? 'pass' : 'fail'));
       checks.push(result('GLB data round-trip', dataMatch, signatureDetail(before, after), dataMatch ? 'pass' : 'fail'));
+      checks.push(result('Clean GLB editor metadata', after.editorMetadataKeys === 0, `${after.editorMetadataKeys} gluestack* key(s) after export`, after.editorMetadataKeys === 0 ? 'pass' : 'fail'));
       checks.push(result(
         'GLB animation round-trip',
         animationMatch,
@@ -185,10 +201,12 @@ export function installDiagnostics({ editor, projects, features = {} }) {
     } catch (error) {
       checks.push(result('GLB export → parse', false, error.message || String(error)));
       checks.push(result('GLB data round-trip', false, 'Export/parse did not complete'));
+      checks.push(result('Clean GLB editor metadata', false, 'Export/parse did not complete'));
       checks.push(result('GLB animation round-trip', false, 'Export/parse did not complete'));
     }
 
     if (projects) {
+      checks.push(result('Project dirty state', typeof projects.dirty === 'boolean', `dirty=${String(projects.dirty)} · autosave generation ${projects.autosaveGeneration ?? '?'}`));
       try {
         await projects.dbPromise;
         checks.push(result('IndexedDB', true, 'project database opened'));
@@ -200,27 +218,50 @@ export function installDiagnostics({ editor, projects, features = {} }) {
         const buffer = await projects.encodeProject();
         const decoded = projects.decodeProject(buffer);
         const metadata = decoded.metadata ?? {};
-        const baseValid = metadata.format === 'gluestack-project' && decoded.glb?.byteLength > 20;
+        const baseValid = metadata.format === PROJECT_FORMAT
+          && metadata.version === CURRENT_PROJECT_VERSION
+          && decoded.glb?.byteLength > 20;
         const metadataValid = Boolean(
           metadata.camera
           && metadata.selection
           && metadata.editor
           && metadata.viewport
+          && metadata.integrity
           && Number.isFinite(metadata.camera.fov)
           && typeof metadata.editor.snapEnabled === 'boolean'
         );
+        const expectedIntegrity = projects.integritySummary();
+        const projectIntegrity = integrityMatches(expectedIntegrity, metadata.integrity);
         checks.push(result('.gluestack encode/decode', baseValid, `v${metadata.version ?? '?'} · ${buffer.byteLength.toLocaleString()} bytes`));
-        checks.push(result('.gluestack editor metadata', metadataValid, metadataValid ? 'camera · selection · editor · viewport present' : 'missing editor metadata'));
+        checks.push(result('.gluestack editor metadata', metadataValid, metadataValid ? 'camera · selection · editor · viewport · integrity present' : 'missing editor metadata'));
+        checks.push(result('.gluestack integrity summary', projectIntegrity, `mesh ${metadata.integrity?.meshes ?? '?'} · materials ${metadata.integrity?.materials ?? '?'} · textures ${metadata.integrity?.textures ?? '?'} · animations ${metadata.integrity?.animations ?? '?'} · stacks ${metadata.integrity?.modifierStacks ?? '?'}`));
 
         const parsed = await parseBuffer(editor, decoded.glb);
         const beforeAnimations = animationSignature(editor.animations ?? []);
         const afterAnimations = animationSignature(parsed.animations ?? []);
         const projectAnimations = animationsMatch(beforeAnimations, afterAnimations);
         checks.push(result('.gluestack animation payload', projectAnimations, `clips ${beforeAnimations.clips}→${afterAnimations.clips} · tracks ${beforeAnimations.tracks}→${afterAnimations.tracks}`));
+
+        const corrupted = buffer.slice(0);
+        new Uint8Array(corrupted)[0] ^= 0xff;
+        let corruptionRejected = false;
+        try { projects.decodeProject(corrupted); } catch { corruptionRejected = true; }
+        checks.push(result('.gluestack corrupted header reject', corruptionRejected, corruptionRejected ? 'corrupted container rejected before scene load' : 'corrupted container was accepted'));
+
+        let newerRejected = false;
+        try {
+          normalizeProjectMetadata({ ...metadata, version: CURRENT_PROJECT_VERSION + 1 });
+        } catch {
+          newerRejected = true;
+        }
+        checks.push(result('.gluestack newer version reject', newerRejected, newerRejected ? `v${CURRENT_PROJECT_VERSION + 1} rejected` : 'newer version accepted unexpectedly'));
       } catch (error) {
         checks.push(result('.gluestack encode/decode', false, error.message || String(error)));
         checks.push(result('.gluestack editor metadata', false, 'encode/decode did not complete'));
+        checks.push(result('.gluestack integrity summary', false, 'encode/decode did not complete'));
         checks.push(result('.gluestack animation payload', false, 'encode/decode did not complete'));
+        checks.push(result('.gluestack corrupted header reject', false, 'encode/decode did not complete'));
+        checks.push(result('.gluestack newer version reject', false, 'encode/decode did not complete'));
       }
     }
 
