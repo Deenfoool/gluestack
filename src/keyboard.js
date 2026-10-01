@@ -3,15 +3,26 @@ import { dissolveSelected } from './edit/dissolve.js';
 import { loopCut } from './edit/cuts.js';
 import { installFeatures } from './features.js';
 import { installSelectionTools } from './runtime/selection-tools.js';
+import { installBoxSelect } from './runtime/box-select.js';
 
 export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snapButton, openAddMenu, requestNumber }) {
   const selectionTools = installSelectionTools({ editor, editMode });
+  const boxSelect = installBoxSelect({ editor, editMode });
   installFeatures({ editor, editMode, knifeTool, requestNumber });
 
   window.addEventListener('keydown', (event) => {
     const target = event.target;
     const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable;
     if (typing) return;
+
+    if (boxSelect?.active) {
+      if (event.code === 'Escape') {
+        event.preventDefault();
+        boxSelect.cancel();
+      }
+      return;
+    }
+
     if (transformModal.handleKey(event)) return;
 
     if (knifeTool.active) {
@@ -61,6 +72,7 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
       if (event.code === 'KeyA' && !commandKey) { event.preventDefault(); editMode.selectAll(); return; }
       if (commandKey && event.code === 'KeyI') { event.preventDefault(); selectionTools.editInvert(); return; }
       if (!commandKey && !event.altKey && event.code === 'KeyL') { event.preventDefault(); selectionTools.editLinked(); return; }
+      if (!commandKey && !event.altKey && event.code === 'KeyB') { event.preventDefault(); boxSelect?.begin(); return; }
       if (commandKey && event.code === 'KeyB') {
         event.preventDefault();
         const factor = requestNumber('Bevel factor (0..0.5)', 0.12, { min: 0.001, max: 0.499 });
@@ -103,6 +115,7 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
     if (event.code === 'KeyA' && event.altKey) { event.preventDefault(); selectionTools.objectSelectNone(); return; }
     if (event.code === 'KeyA' && !commandKey && !event.shiftKey) { event.preventDefault(); selectionTools.objectSelectAll(); return; }
     if (commandKey && event.code === 'KeyI') { event.preventDefault(); selectionTools.objectInvert(); return; }
+    if (!commandKey && !event.altKey && !event.shiftKey && event.code === 'KeyB') { event.preventDefault(); boxSelect?.begin(); return; }
     if (event.shiftKey && event.code === 'KeyD') { event.preventDefault(); editor.duplicateSelected(); return; }
     if (event.shiftKey && event.code === 'KeyA') { event.preventDefault(); openAddMenu(); return; }
     if (commandKey && event.code === 'KeyJ') { event.preventDefault(); editor.joinSelected(); return; }
