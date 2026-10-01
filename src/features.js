@@ -90,6 +90,16 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     }),
   );
 
+  const harmonicUnwrap = await loadAndInstall(
+    editor,
+    'Harmonic UV unwrap',
+    () => import('./uv/unwrap-solver.js'),
+    ({ installHarmonicUnwrap }) => installHarmonicUnwrap({
+      controller: uv?.controller,
+      workspace: document.querySelector('#uv-workspace'),
+    }),
+  );
+
   const uvRelax = await loadAndInstall(
     editor,
     'UV Relax',
@@ -180,6 +190,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     uv,
     advancedUV,
     smartIslands,
+    harmonicUnwrap,
     uvRelax,
     materials,
     projects,
