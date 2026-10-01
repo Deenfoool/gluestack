@@ -88,6 +88,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     ({ installReleaseGate }) => installReleaseGate({
       editor,
       diagnostics,
+      transformIntegrity,
       metadataAudit,
       goldenDiagnostics,
       uvGoldenDiagnostics,
