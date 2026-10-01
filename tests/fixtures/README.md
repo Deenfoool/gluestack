@@ -15,6 +15,12 @@
 - high-poly mesh;
 - malformed GLTF negative case.
 
-Fixtures не изменяют live project scene. Они создаются только по запросу Diagnostics, экспортируются, повторно загружаются и после проверки освобождают свои geometry/material/texture resources.
+`external/` содержит настоящий multi-file fixture:
 
-Отдельный static fixture для multi-file `.gltf + .bin + textures` остаётся обязательным P0 пунктом: он нужен именно для проверки file-selection/URI resolver, которую нельзя полноценно заменить in-memory exporter round-trip.
+- `fixture.gltf`;
+- `mesh.bin`;
+- `albedo.png`.
+
+Diagnostics загружает эти три файла с GitHub Pages, превращает их в локальные `File`-объекты и прогоняет через тот же `importer.parseFiles()`/URL resolver, который используется пользовательским File Import. Проверка не добавляет fixture в live project scene.
+
+Все in-memory fixtures создаются только по запросу Diagnostics, экспортируются, повторно загружаются и после проверки освобождают свои geometry/material/texture resources.
