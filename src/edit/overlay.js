@@ -4,12 +4,20 @@ const ORANGE = new THREE.Color(0xff9500);
 const VERTEX_IDLE = new THREE.Color(0xb8b8b8);
 const EDGE_IDLE = new THREE.Color(0x707070);
 
+function isLogicalEdge(edge, triangleToFaceGroup) {
+  if (!edge?.triangles?.length) return false;
+  if (edge.triangles.length !== 2) return true;
+  const [a, b] = edge.triangles;
+  return triangleToFaceGroup?.[a] !== triangleToFaceGroup?.[b];
+}
+
 export class EditOverlay {
   constructor(editor) {
     this.editor = editor;
     this.group = null;
     this.points = null;
     this.lines = null;
+    this.edgeKeys = [];
   }
 
   mount(mesh) {
@@ -32,9 +40,10 @@ export class EditOverlay {
     this.group = null;
     this.points = null;
     this.lines = null;
+    this.edgeKeys = [];
   }
 
-  refresh({ vertices, edges, triangles, selectionMode, selectedVertices, selectedEdges, selectedTriangles }) {
+  refresh({ vertices, edges, triangles, triangleToFaceGroup, selectionMode, selectedVertices, selectedEdges, selectedTriangles }) {
     if (!this.group) return;
     for (const child of [...this.group.children]) {
       this.group.remove(child);
@@ -63,10 +72,17 @@ export class EditOverlay {
 
     const edgePositions = [];
     const edgeColors = [];
+    this.edgeKeys = [];
     edges.forEach((edge) => {
+      // Three.js stores polygons as triangles. Hide coplanar triangulation edges that
+      // belong to the same logical face group so Edit Mode presents quad/polygon
+      // topology instead of implementation-detail diagonals.
+      if (!isLogicalEdge(edge, triangleToFaceGroup)) return;
+
       const a = vertices[edge.a].position;
       const b = vertices[edge.b].position;
       edgePositions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      this.edgeKeys.push(edge.key);
       const faceSelected = edge.triangles.some((triangleIndex) => selectedTriangles.has(triangleIndex));
       const vertexSelected = selectedVertices.has(edge.a) && selectedVertices.has(edge.b);
       const selected = selectionMode === 'edge'
