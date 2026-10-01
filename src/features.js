@@ -80,6 +80,21 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
   const modifierStackDiagnostics = await loadAndInstall(editor, 'Modifier Stack diagnostics', () => import('./runtime/modifier-stack-diagnostics.js'), ({ installModifierStackDiagnostics }) => installModifierStackDiagnostics({ editor, diagnostics, modifierStack }));
   const importExportDiagnostics = await loadAndInstall(editor, 'Import / Export diagnostics', () => import('./runtime/import-export-diagnostics.js'), ({ installImportExportDiagnostics }) => installImportExportDiagnostics({ editor, diagnostics, importer }));
   const destructiveGuardDiagnostics = await loadAndInstall(editor, 'Destructive guard diagnostics', () => import('./runtime/destructive-guard-diagnostics.js'), ({ installDestructiveGuardDiagnostics }) => installDestructiveGuardDiagnostics({ editor, diagnostics }));
+  const releaseGate = await loadAndInstall(
+    editor,
+    'v1 Release Gate',
+    () => import('./runtime/release-gate.js'),
+    ({ installReleaseGate }) => installReleaseGate({
+      editor,
+      diagnostics,
+      metadataAudit,
+      goldenDiagnostics,
+      uvGoldenDiagnostics,
+      modifierStackDiagnostics,
+      importExportDiagnostics,
+      destructiveGuardDiagnostics,
+    }),
+  );
 
   const result = {
     ...installed,
@@ -90,6 +105,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     modifierStackDiagnostics,
     importExportDiagnostics,
     destructiveGuardDiagnostics,
+    releaseGate,
   };
   const failed = Object.entries(result).filter(([, value]) => !value).map(([name]) => name);
   if (failed.length) editor.events.onStatus(`Базовый редактор готов · не загрузились: ${failed.join(', ')}`);
