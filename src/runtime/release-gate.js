@@ -21,6 +21,7 @@ function normalizeRow(suite, item, index) {
 export function installReleaseGate({
   editor,
   diagnostics,
+  transformIntegrity,
   metadataAudit,
   goldenDiagnostics,
   uvGoldenDiagnostics,
@@ -43,6 +44,7 @@ export function installReleaseGate({
 
   const suites = [
     ['Core Diagnostics', diagnostics],
+    ['Transform Integrity', transformIntegrity],
     ['Metadata Audit', metadataAudit],
     ['Golden Fixtures', goldenDiagnostics],
     ['UV Golden', uvGoldenDiagnostics],
