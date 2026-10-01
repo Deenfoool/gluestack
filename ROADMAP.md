@@ -136,7 +136,9 @@
 - [x] Централизованный `src/projects/format.js` и migration `v1 → v2`.
 - [x] Newer unsupported version блокируется с объяснением.
 - [x] Формальная спецификация `docs/PROJECT_FORMAT.md`.
-- [x] Project integrity summary: mesh/material/texture/animation/modifier stack counts.
+- [x] Project integrity summary: mesh/material/texture/animation/modifier stack/userData counts.
+- [x] Central runtime/editor/transient `userData` policy.
+- [x] Project payload strips transient `__gluestack*`, сохраняя editor-state и imported extras.
 - [x] Safe history clone Skinned hierarchy / CanvasTexture.
 
 ## Этап 7 — Game Ready baseline
@@ -153,6 +155,12 @@
 - [x] Invalid/unused material group/slot validation.
 - [x] Normal-map prerequisites / tangent-policy warning.
 - [x] Optimize `before → after` report.
+- [x] Dry-run Cleanup Preview.
+- [x] Pixel-content duplicate texture audit.
+- [x] Web / Generic glTF / Godot / Unity export profile wiring.
+- [x] ORM packing with UV-channel/transform compatibility guards.
+- [x] Texture resize policy + memory preview.
+- [x] Compatible normal-map tangent generation.
 
 ## Этап 8 — Animation / Scene / Generators
 
@@ -198,8 +206,10 @@ Fixture-набор создан в `tests/fixtures/`; реальный PASS ос
 - [x] custom BufferAttribute fixture.
 - [x] high-poly fixture.
 - [x] malformed GLTF negative fixture.
+- [x] real binary `.gluestack v1` migration fixture.
 - [x] Help → `Run Golden Fixtures` regression runner.
 - [x] External fixture использует тот же `importer.parseFiles()` resolver, что пользовательский import.
+- [x] Golden runner проверяет `.gluestack v1 → v2` decode/migration/GLB parse.
 - [ ] Реально прогнать все fixtures на GitHub Pages и зафиксировать PASS/known WARN.
 - [ ] Для fixtures прогнать `.gluestack save → open` editor-state round-trip.
 - [ ] Проверить destructive guards на unsupported fixtures.
@@ -215,10 +225,13 @@ Fixture-набор создан в `tests/fixtures/`; реальный PASS ос
 - [x] Transaction-like open.
 - [x] Current/previous project version policy.
 - [x] Clean runtime GLB clone strips `gluestack*` / `__gluestack*` keys.
+- [x] Project export strips transient `__gluestack*` without removing editor-state/imported extras.
+- [x] Central Metadata Policy classifies runtime / editor / transient keys.
+- [x] Help → Metadata Audit compares live / project / clean-export metadata.
 - [x] Diagnostics проверяет clean-export metadata leak.
 - [x] Diagnostics проверяет corrupted/newer project rejection.
-- [ ] Полный audit transient `userData` полей всех feature-модулей.
-- [ ] Migration fixture для настоящего `.gluestack v1`.
+- [x] Migration fixture для настоящего `.gluestack v1`.
+- [ ] Реально прогнать Metadata Audit на production Pages без `FAIL`.
 
 ## P0.4 Modifier Stack production
 
@@ -236,7 +249,7 @@ Fixture-набор создан в `tests/fixtures/`; реальный PASS ос
 
 ## P0.5 Advanced UV release QA
 
-Функциональный код уже реализован; теперь нужны regression/quality проверки.
+Функциональный код реализован; release-ready статус зависит от реального regression PASS.
 
 - [x] Angle-based smart island segmentation.
 - [x] Non-planar harmonic/cotangent unwrap.
@@ -252,37 +265,42 @@ Fixture-набор создан в `tests/fixtures/`; реальный PASS ос
 - [x] Overlap/OOB/degenerate checks.
 - [x] Mirror/Align.
 - [x] Stitch/Weld.
-- [ ] UV golden fixtures: cube hard seams / cylinder / sphere / irregular organic mesh / hole topology.
-- [ ] Убедиться, что Relax не инвертирует UV triangles на supported fixtures.
-- [ ] Проверить packing overlap после rotation/padding на 100+ islands.
+- [x] UV Golden runner: cube hard seams / cylinder / sphere / irregular organic / hole topology.
+- [x] UV Golden runner проверяет Relax signed-area inversion.
+- [x] UV Golden runner stress-тестирует packer на 100 islands.
+- [ ] Реально прогнать UV Golden Fixtures на GitHub Pages без unexplained FAIL.
 - [ ] Worker/cancel для тяжёлого unwrap/pack — переносится в Performance P1, если P0 fixtures укладываются в интерактивное время.
 
 ## P0.6 Game Ready optimizer v2
 
-- [ ] Export profiles: Web / Godot / Unity / Generic glTF.
-- [ ] Safe ORM channel packing policy.
-- [ ] Texture resize 512/1K/2K/4K + memory preview.
-- [ ] Alpha/transparency protection policy.
-- [ ] Tangent generation/recalculation для compatible normal-mapped mesh.
+- [x] Export profiles: Web / Godot / Unity / Generic glTF связаны с clean GLB export.
+- [x] Profiles не меняют scale/up-axis молча; различия ограничены безопасными export-настройками.
+- [x] Safe ORM channel packing с одинаковым UV channel/transform/wrap policy.
+- [x] Texture resize 512/1K/2K/4K + memory preview.
+- [x] Alpha/transparency protection: RGBA сохраняется при resize, alphaMap/base alpha не удаляются optimizer-ом.
+- [x] Tangent generation/recalculation для compatible normal-mapped mesh.
 - [x] Negative scale / winding validation.
 - [x] Duplicate position-vertex warning.
 - [x] Non-manifold/open/degenerate validation.
 - [x] Material slot/group validation.
-- [ ] Duplicate texture-content detection.
-- [ ] Cleanup preview до Apply.
+- [x] Duplicate texture-content detection через pixel SHA-256 audit.
+- [x] Cleanup preview до Apply без изменения сцены.
 - [x] `before → after` optimization report.
 - [x] Optimize остаётся одной Undo operation.
+- [ ] Реально прогнать Cleanup Preview / Resize / ORM / Tangents на golden textured assets.
 
 ## P0.7 LOD policy
 
-- [ ] User-editable ratios.
-- [ ] Triangle floor.
-- [ ] Per-object skip flag.
-- [ ] Preserve hard-edge/normal policy.
-- [ ] Simplification sanity metrics.
-- [ ] Screen coverage/distance metadata.
-- [ ] Export all LODs / LOD0 only / individual LOD files.
-- [ ] Не заменять существующую LOD-chain без явного Replace.
+- [x] User-editable ratios.
+- [x] Triangle floor для source и сгенерированных LOD levels.
+- [x] Per-object skip flag.
+- [x] Preserve / Recalculate normals policy.
+- [x] Hard-edge signature sanity warning.
+- [x] Simplification sanity metrics: triangles / bounds / UV validity / hard-edge signature.
+- [x] Screen coverage/distance runtime metadata.
+- [x] Export all LODs / LOD0 only / individual LOD files.
+- [x] Существующая LOD-chain не заменяется без явного Replace.
+- [ ] Реально прогнать LOD policy на textured/multi-material/hard-edge golden assets.
 
 ---
 
@@ -441,10 +459,10 @@ Fixture-набор создан в `tests/fixtures/`; реальный PASS ос
 - [ ] P0 browser QA закрыт в Chrome/Edge/Firefox desktop.
 - [ ] Golden fixtures не имеют необъяснённых `FAIL`.
 - [ ] Нет известного silent data-loss для поддерживаемой операции.
-- [ ] `.gluestack v1 → v2` migration/recovery реально протестированы.
+- [ ] `.gluestack v1 → v2` migration/recovery реально протестированы на production Pages.
 - [ ] Import → edit → save → reopen → export → reimport пройден на golden fixtures.
 - [ ] Repeat project load не оставляет stale selection/gizmo/resources.
-- [ ] Advanced UV regression fixtures пройдены.
+- [ ] Advanced UV regression fixtures реально пройдены.
 - [ ] Game Ready report соответствует реально экспортированному GLB.
 - [ ] README содержит только актуальное описание, Pages link, возможности/ограничения, licenses, roadmap.
 - [ ] `THIRD_PARTY_LICENSES.md` соответствует runtime dependencies.
@@ -453,13 +471,12 @@ Fixture-набор создан в `tests/fixtures/`; реальный PASS ос
 
 ## Текущий порядок работ
 
-1. **P0 browser/golden QA — запуск остаётся обязательным release gate.**
-2. **Завершить Game Ready optimizer v2.**
-3. **LOD policy + export modes.**
-4. **Modifier Stack caching + stack-safe object operations.**
-5. **Import/export compatibility hardening.**
-6. **Performance/workers.**
-7. **P1 Modeling UX + Graph Editor.**
-8. **Release audit → v1.0.**
+1. **P0 browser/golden QA — реальный запуск остаётся главным release gate.**
+2. **Modifier Stack caching + stack-safe object operations.**
+3. **Import/export compatibility hardening.**
+4. **Performance/workers.**
+5. **P1 Modeling UX + Materials/Paint.**
+6. **Graph Editor.**
+7. **Release audit → v1.0.**
 
 Если новая задача не исправляет реальный defect и не относится к P0/P1, она не должна вытеснять release blockers.
