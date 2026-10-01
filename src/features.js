@@ -176,7 +176,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     editor,
     'Golden fixtures',
     () => import('./runtime/golden-diagnostics.js'),
-    ({ installGoldenDiagnostics }) => installGoldenDiagnostics({ editor, diagnostics }),
+    ({ installGoldenDiagnostics }) => installGoldenDiagnostics({ editor, diagnostics, importer }),
   );
 
   const result = { ...installed, diagnostics, goldenDiagnostics };
