@@ -143,7 +143,7 @@ function parseGltf(editor, payload) {
   });
 }
 
-async function parseWithResolver(editor, payload, fileMap, label) {
+async function parseWithResolver(editor, payload, fileMap) {
   const urls = new Map();
   const manager = editor.loader.manager;
   manager.setURLModifier((url) => {
@@ -154,12 +154,41 @@ async function parseWithResolver(editor, payload, fileMap, label) {
   });
 
   try {
-    const gltf = await parseGltf(editor, payload);
-    return addImportedScene(editor, gltf, label);
+    return await parseGltf(editor, payload);
   } finally {
     manager.setURLModifier(undefined);
     for (const url of urls.values()) URL.revokeObjectURL(url);
   }
+}
+
+export async function parseSelectedFiles(editor, files) {
+  const allFiles = [...(files ?? [])];
+  const primaryFiles = allFiles.filter((file) => /\.(?:glb|gltf)$/i.test(file.name));
+  if (primaryFiles.length !== 1) {
+    throw new Error('Выберите ровно один .glb/.gltf и, при необходимости, его .bin/текстуры');
+  }
+
+  const primary = primaryFiles[0];
+  const label = primary.name.replace(/\.(?:glb|gltf)$/i, '');
+  if (/\.glb$/i.test(primary.name)) {
+    return { gltf: await parseGltf(editor, await primary.arrayBuffer()), label, primary };
+  }
+
+  const text = await primary.text();
+  let json;
+  try { json = JSON.parse(text); }
+  catch { throw new Error('Некорректный JSON в .gltf'); }
+
+  const fileMap = makeFileMap(allFiles.filter((file) => file !== primary));
+  const missing = uniqueMissing(fileMap, referencedUris(json));
+  if (missing.length) throw new Error(`Не выбраны связанные файлы: ${missing.join(', ')}`);
+
+  return { gltf: await parseWithResolver(editor, text, fileMap), label, primary };
+}
+
+export async function importSelectedFiles(editor, files) {
+  const parsed = await parseSelectedFiles(editor, files);
+  return addImportedScene(editor, parsed.gltf, parsed.label);
 }
 
 export function installImportPipeline({ editor, editMode, knifeTool }) {
@@ -179,34 +208,9 @@ export function installImportPipeline({ editor, editMode, knifeTool }) {
     try {
       knifeTool?.cancel?.(true);
       if (editMode?.active) editMode.exit();
-
-      const primaryFiles = files.filter((file) => /\.(?:glb|gltf)$/i.test(file.name));
-      if (primaryFiles.length !== 1) {
-        throw new Error('Выберите ровно один .glb/.gltf и, при необходимости, его .bin/текстуры');
-      }
-
-      const primary = primaryFiles[0];
-      editor.events.onStatus(`Импорт: ${primary.name}…`);
-
-      if (/\.glb$/i.test(primary.name)) {
-        const payload = await primary.arrayBuffer();
-        const gltf = await parseGltf(editor, payload);
-        addImportedScene(editor, gltf, primary.name.replace(/\.glb$/i, ''));
-        return;
-      }
-
-      const text = await primary.text();
-      let json;
-      try { json = JSON.parse(text); }
-      catch { throw new Error('Некорректный JSON в .gltf'); }
-
-      const fileMap = makeFileMap(files.filter((file) => file !== primary));
-      const missing = uniqueMissing(fileMap, referencedUris(json));
-      if (missing.length) {
-        throw new Error(`Не выбраны связанные файлы: ${missing.join(', ')}`);
-      }
-
-      await parseWithResolver(editor, text, fileMap, primary.name.replace(/\.gltf$/i, ''));
+      const primary = files.find((file) => /\.(?:glb|gltf)$/i.test(file.name));
+      editor.events.onStatus(`Импорт: ${primary?.name ?? 'files'}…`);
+      await importSelectedFiles(editor, files);
     } catch (error) {
       console.error('[gluestack] import failed', error);
       editor.events.onStatus(`Ошибка импорта: ${error.message || error}`);
@@ -216,5 +220,9 @@ export function installImportPipeline({ editor, editMode, knifeTool }) {
   };
 
   input.addEventListener('change', onChange, { capture: true });
-  return { input };
+  return {
+    input,
+    parseFiles: (files) => parseSelectedFiles(editor, files),
+    importFiles: (files) => importSelectedFiles(editor, files),
+  };
 }
