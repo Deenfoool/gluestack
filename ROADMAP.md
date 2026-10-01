@@ -1,490 +1,465 @@
 # Roadmap gluestack
 
-`gluestack` — браузерный Blender-подобный 3D-редактор для создания, редактирования, UV-развёртки, текстурирования, оптимизации и экспорта игровых `.glb` без обязательного backend.
+`gluestack` — браузерный Blender-подобный 3D-редактор для создания, редактирования, UV-развёртки, текстурирования, анимации, оптимизации и экспорта игровых `.glb` без обязательного backend.
 
-Этот roadmap — не список кнопок. Пункт считается завершённым только тогда, когда операция работает на реальной сцене, не теряет поддерживаемые данные, корректно участвует в Undo/Redo и проходит round-trip сохранения/экспорта там, где это применимо.
+Этот roadmap — рабочий план до стабильного `v1.0`. Галочка означает, что функция **реализована по коду**; release-gates отдельно требуют реального browser/regression QA.
 
 ## Правила проекта
 
 - Один актуальный pipeline на одну задачу. Заменённый код, мёртвые ветки и устаревшие файлы удаляются в том же изменении.
-- История Git используется вместо хранения legacy-кода рядом с новой реализацией.
-- Нельзя молча терять данные GLB. Если операция пока не умеет безопасно сохранить feature/attribute, она должна отказаться от выполнения и объяснить причину.
-- Обычный экспорт `.glb` содержит только runtime/game-ready данные. Editor-only состояние хранится только в `.gluestack`.
-- Optional feature не должен валить базовый Object/Edit Mode при ошибке загрузки.
-- Все destructive-операции обязаны иметь Undo/Redo или явный безопасный checkpoint.
-- Любая новая editor-only структура должна иметь стратегию versioning/migration для `.gluestack`.
+- Git history используется вместо хранения legacy-кода рядом с новой реализацией.
+- Нельзя молча терять данные GLB. Неподдерживаемая destructive-операция обязана отказаться до изменения данных.
+- Runtime `.glb` не должен содержать editor-only `gluestack*` / `__gluestack*` metadata.
+- Editor-state хранится в `.gluestack` и имеет централизованный version/migration layer.
+- Optional feature не должен валить Object/Edit Mode при ошибке загрузки.
+- Изменяющая проект операция обязана иметь Undo/Redo/checkpoint.
+- Долгие операции не должны блокировать UI без progress/cancel после появления worker pipeline.
 
-## Definition of Done для функции
+## Definition of Done
 
-Функция считается готовой, если:
+Функция считается готовой к релизу, когда она:
 
-1. работает не только на Cube, но и минимум на импортированной модели;
-2. не создаёт `NaN`, пустую geometry, broken indices/groups или dangling references;
-3. сохраняет заявленные UV/material/custom attributes либо заранее блокируется;
+1. работает минимум на primitive и импортированной модели;
+2. не создаёт NaN, empty geometry, broken groups/indices или dangling resources;
+3. сохраняет заявленные UV/material/animation/custom data либо заранее блокируется;
 4. корректно освобождает geometry/material/texture resources;
-5. участвует в Undo/Redo, если меняет проект;
+5. участвует в Undo/Redo;
 6. переживает `.gluestack save → open`, если это editor-state;
 7. переживает `.glb export → import`, если это runtime-state;
-8. Diagnostics не сообщает новый `FAIL`;
-9. ошибка пользователя показывает понятный status, а не только console exception.
+8. проходит соответствующий golden/regression fixture;
+9. не добавляет необъяснённый `FAIL` в Diagnostics;
+10. показывает понятную ошибку пользователю, а не только console exception.
 
 ---
 
 # Реализованный baseline
 
-Ниже — уже существующий функциональный слой. Он считается feature-complete по коду, но весь проект всё ещё должен пройти единый release QA.
-
 ## Этап 0 — фундамент
 
-- [x] Статическое приложение для GitHub Pages.
-- [x] Blender-подобная раскладка: меню, toolbar, viewport, Outliner, Properties.
-- [x] Three.js viewport, камера, сетка и освещение.
+- [x] GitHub Pages static app.
+- [x] Blender-подобные menu / toolbar / viewport / Outliner / Properties.
+- [x] Three.js viewport, camera, grid, lighting.
 - [x] Lucide icons.
 - [x] PWA manifest и favicon/app icons из `assets/images/`.
-- [x] Выбор объектов и Move / Rotate / Scale gizmo.
-- [x] Создание Cube / Sphere / Cylinder / Cone / Plane / Torus.
-- [x] Импорт `.glb/.gltf` и экспорт `.glb`.
-- [x] `.gltf` с внешними `.bin`/текстурами через multi-file import и локальный URL resolver.
-- [x] Failure isolation дополнительных feature-модулей.
+- [x] Base primitives: Cube / Sphere / Cylinder / Cone / Plane / Torus.
+- [x] `.glb/.gltf` import и `.glb` export.
+- [x] Multi-file `.gltf + .bin + textures` local resolver.
+- [x] Failure isolation feature-модулей.
 
 ## Этап 1 — Object Mode
 
-- [x] Undo / Redo с общей историей.
-- [x] Collections, parenting и иерархия Outliner.
+- [x] Undo / Redo.
+- [x] Collections / parenting / Outliner hierarchy.
 - [x] Multi-select.
-- [x] Duplicate, Join, Separate, Apply Transform, Origin to Geometry.
-- [x] Blender-подобный numeric input: `G X 2`, `R Z 90`, `S 2`.
-- [x] Базовый snapping.
-- [x] Scene/Camera state в Undo/Redo: фон, exposure, камера, orbit target и рабочее освещение.
+- [x] Duplicate / Join / Separate / Apply Transform / Origin.
+- [x] `G X 2`, `R Z 90`, `S 2` numeric transform.
+- [x] Grid snap.
+- [x] Scene/Camera state в history.
 
 ## Этап 2 — Edit Mode
 
-- [x] Object / Edit через `Tab`.
-- [x] Vertex / Edge / Face selection (`1 / 2 / 3`).
-- [x] `G / R / S` для компонентов и transform gizmo.
-- [x] Indexed/non-indexed mesh через логические welded vertices.
-- [x] Extrude, Inset, Merge, Fill, Delete.
+- [x] Object/Edit через `Tab`.
+- [x] Vertex / Edge / Face select.
+- [x] Component transform + gizmo.
+- [x] Indexed/non-indexed topology layer.
+- [x] Extrude / Inset / Merge / Fill / Delete.
 - [x] Recalculate / Flip Normals.
-- [x] Bevel Face и Dissolve Vertex / Edge.
-- [x] Loop Cut по quad-strip.
-- [x] Интерактивный Knife для поддерживаемой topology.
-- [x] Интерполяция UV и поддерживаемых BufferAttributes при topology-editing.
-- [x] Guards для Skinned/Morph/Instanced сценариев, где текущий topology pipeline может потерять данные.
+- [x] Bevel / Dissolve / Loop Cut / Knife.
+- [x] UV и поддерживаемые BufferAttributes сохраняются/интерполируются при topology edit.
+- [x] Guards для Skin / Morph / Instanced сценариев без safe pipeline.
 
 ## Этап 3 — Modifiers
 
-- [x] Mirror X/Y/Z.
-- [x] Array с Count и XYZ Offset.
-- [x] Bevel Modifier.
-- [x] Solidify.
-- [x] Loop-style Subdivision 1–3.
-- [x] Decimate + Triangulate / Normalize.
-- [x] Boolean Union / Difference / Intersect для поддерживаемых watertight Mesh.
-- [x] Неразрушающий stack для Mirror / Array / Bevel / Solidify / Subdivision / Decimate / Triangulate.
-- [x] Enable/Disable, reorder, remove, Apply Stack, Clear Stack.
-- [x] `.gluestack` сохраняет source geometry + modifier descriptors.
-- [x] Обычный `.glb` экспортирует evaluated geometry без editor-only stack metadata.
-- [x] Multi-material-aware simplification сохраняет geometry groups/materialIndex.
+- [x] Mirror / Array / Bevel / Solidify / Subdivision / Decimate / Triangulate.
+- [x] Boolean Union / Difference / Intersect для поддерживаемых watertight mesh.
+- [x] Non-destructive Modifier Stack.
+- [x] Enable/Disable / remove / Up/Down.
+- [x] Editable parameters после добавления modifier.
+- [x] Duplicate modifier.
+- [x] Drag reorder.
+- [x] Collapse/expand cards с сохранением UI-state в `.gluestack`.
+- [x] Explicit per-modifier error state.
+- [x] `Bake Through Here` — безопасно запекает stack-prefix в source geometry.
+- [x] Apply Stack / Clear Stack.
+- [x] `.gluestack` сохраняет source geometry + descriptors; runtime GLB получает evaluated geometry.
+- [x] Multi-material-aware simplification сохраняет groups/materialIndex.
 
 ## Этап 4 — UV Editing
 
 - [x] Отдельный UV workspace без второго WebGL renderer.
 - [x] UV Vertex / Edge / Island selection.
-- [x] Mark Seam / Clear Seam.
-- [x] Unwrap from seams и Smart UV Project базового уровня.
-- [x] Cube / Cylinder / Sphere / View projection.
-- [x] UV Move / Rotate / Scale и drag.
-- [x] Pack Islands базового уровня.
-- [x] Average Island Scale.
+- [x] Mark/Clear Seam.
+- [x] Cube / Cylinder / Sphere / View projections.
+- [x] Move / Rotate / Scale / drag.
+- [x] Smart seams по face-angle threshold.
+- [x] Harmonic/cotangent unwrap solver для seam-islands.
+- [x] Relax для внутренних UV vertices.
+- [x] Stretch heatmap / distortion score.
+- [x] Aspect-aware Pack Islands вместо фиксированной grid.
+- [x] Optional island rotation 90°.
+- [x] Pixel padding при заданном texture resolution.
+- [x] Preserve island aspect ratio.
+- [x] Pack Selected.
+- [x] Uniform Normalize 0..1 с сохранением относительного scale/density.
+- [x] Texel Density measure / set / match selected.
+- [x] Overlap / out-of-bounds / zero-area UV checks.
+- [x] UV Mirror X/Y.
+- [x] Island Align Left/Right/Top/Bottom/Center.
+- [x] Stitch/Weld selected duplicate UV edges + seam removal.
 - [x] Reference/Base Color texture под UV.
 
-## Этап 5 — материалы и Texture Paint
+## Этап 5 — Materials / Texture Paint
 
-- [x] `MeshStandardMaterial` / glTF PBR pipeline.
+- [x] glTF-compatible PBR на `MeshStandardMaterial`.
 - [x] Base Color / Normal / Roughness / Metallic / AO / Emissive / Opacity.
-- [x] PNG / JPEG / WebP texture import.
+- [x] PNG / JPEG / WebP textures.
 - [x] Material Preview.
 - [x] Texture offset / scale / rotation.
 - [x] Multi-material slot editing.
 - [x] Shared texture lifecycle protection.
-- [x] Texture Paint по выбранному material slot.
-- [x] Paint channels: Base Color / Roughness / Metallic / Normal / Emissive.
-- [x] Корректное разделение sRGB и linear texture channels.
+- [x] Texture Paint по material slot.
+- [x] Paint Base Color / Roughness / Metallic / Normal / Emissive.
+- [x] sRGB/linear channel handling.
 
-## Этап 6 — проекты и recovery
+## Этап 6 — Projects / Recovery
 
-- [x] IndexedDB projects.
-- [x] Debounced autosave.
-- [x] Recover Autosave.
-- [x] Бинарный `.gluestack`: GLB payload + editor metadata.
-- [x] `.gluestack` v2 для non-destructive modifier stack.
-- [x] Camera / selection / snap / viewport/editor state.
-- [x] Animation clips внутри project round-trip.
-- [x] Safe history clone для Skinned hierarchy и CanvasTexture.
-- [x] Editable geometry/material isolation после загрузки проекта.
+- [x] IndexedDB named projects.
+- [x] Dirty-state indicator.
+- [x] `Ctrl+S` local quick-save / `Ctrl+Shift+S` project download.
+- [x] `beforeunload` warning для dirty project.
+- [x] Debounced generation-safe autosave.
+- [x] Backup предыдущего autosave snapshot.
+- [x] Recover current / previous autosave.
+- [x] Transaction-like project open: decode/parse/validate до замены live-scene.
+- [x] Corrupted project/header/GLB rejection.
+- [x] `.gluestack` v2 container.
+- [x] Централизованный `src/projects/format.js` и migration `v1 → v2`.
+- [x] Newer unsupported version блокируется с объяснением.
+- [x] Формальная спецификация `docs/PROJECT_FORMAT.md`.
+- [x] Project integrity summary: mesh/material/texture/animation/modifier stack counts.
+- [x] Safe history clone Skinned hierarchy / CanvasTexture.
 
-## Этап 7 — Game Ready
+## Этап 7 — Game Ready baseline
 
 - [x] Mesh / vertex / triangle / material / texture stats.
 - [x] Texture RAM estimate.
-- [x] Проверки missing normals, non-unit scale, empty mesh, NaN/Infinity, oversized textures.
+- [x] Missing normals / non-unit scale / empty mesh / NaN / oversized texture checks.
 - [x] Optimize Scene: merge compatible vertices + material dedup.
-- [x] LOD0 / LOD1 / LOD2 generation.
-- [x] UV-safe и multi-material-aware LOD/Decimate для поддерживаемых attributes.
-- [x] Реальный размер экспортируемого GLB через exporter.
-- [x] Diagnostics: export→parse и project encode/decode round-trip.
+- [x] LOD0/LOD1/LOD2 generation.
+- [x] UV-safe multi-material LOD/Decimate для поддерживаемых attributes.
+- [x] Real GLB byte-size estimate.
+- [x] Production topology validation: degenerate / non-manifold / open edges.
+- [x] Inconsistent winding / negative mirrored transform warnings.
+- [x] Invalid/unused material group/slot validation.
+- [x] Normal-map prerequisites / tangent-policy warning.
+- [x] Optimize `before → after` report.
 
-## Этап 8 — animation / scene / generators
+## Этап 8 — Animation / Scene / Generators
 
-- [x] Procedural Rock / Island / Tree / Crate.
-- [x] Scene/Camera controls и экспортируемые Light/Camera.
+- [x] Rock / Island / Tree / Crate generators.
+- [x] Scene/Camera controls + exported Light/Camera.
 - [x] Animation clip import/export/project/history round-trip.
-- [x] Animation preview Play / Stop / Speed.
-- [x] Rename retargets animation tracks.
+- [x] Preview Play / Stop / Speed.
+- [x] Rename retargets tracks.
 - [x] Transform Keyframe Editor.
-- [x] Dope Sheet: key display, scrub, drag/time move, delete key.
-- [x] Linear / Step / Smooth interpolation с capability check.
+- [x] Dope Sheet: scrub / key drag-time / delete.
+- [x] Linear / Step / Smooth interpolation capability check.
 
 ---
 
-# Путь к v1.0
+# P0 — путь к v1.0
 
-Порядок ниже приоритетный. Пока P0 не закрыт, новые крупные экспериментальные функции не должны отодвигать release blockers.
+P0 имеет приоритет над новыми экспериментальными фичами.
 
-## P0 — Production Integrity и browser QA
+## P0.1 Browser QA
 
-### Полный smoke-test
+- [ ] Полный Pages flow: `New → Modeling → Edit → UV → Material → Paint → Modifiers → Save → Reload → Export → Re-import`.
+- [ ] Все workspaces/menu/actions без runtime exceptions.
+- [ ] Hotkeys и focus conflicts.
+- [ ] Chrome desktop.
+- [ ] Edge desktop.
+- [ ] Firefox desktop.
+- [ ] Resize / fullscreen / high-DPI / browser zoom.
+- [ ] WebGL context lost/restored без потери проекта.
+- [ ] 10+ project opens в одной сессии без stale selection/gizmo/GPU leaks.
 
-- [ ] Пройти полный сценарий на опубликованном GitHub Pages: `New → Modeling → Edit → UV → Material → Paint → Modifiers → Save → Reload → Export → Re-import`.
-- [ ] Проверить все workspace tabs и все menu/actions на runtime exceptions.
-- [ ] Проверить все основные hotkeys и конфликты с input/prompt/UI focus.
-- [ ] Проверить Chrome, Edge и Firefox desktop.
-- [ ] Проверить resize окна, fullscreen, высокий DPI и browser zoom.
-- [ ] Проверить потерю/возврат WebGL context без полной потери проекта.
-- [ ] Проверить повторное открытие 10+ проектов за сессию на stale selection, stale gizmos и GPU resource leaks.
+## P0.2 Golden regression fixtures
 
-### Golden round-trip assets
+Fixture-набор создан в `tests/fixtures/`; реальный PASS остаётся release-gate.
 
-Добавить небольшой постоянный набор тестовых моделей в отдельную test-fixture область, не в production asset path:
+- [x] primitive single-material fixture.
+- [x] multi-material + groups fixture.
+- [x] UV fixture.
+- [x] PBR texture channels fixture.
+- [x] real external `.gltf + .bin + texture` fixture.
+- [x] transform animation fixture.
+- [x] SkinnedMesh fixture.
+- [x] morph target fixture.
+- [x] custom BufferAttribute fixture.
+- [x] high-poly fixture.
+- [x] malformed GLTF negative fixture.
+- [x] Help → `Run Golden Fixtures` regression runner.
+- [x] External fixture использует тот же `importer.parseFiles()` resolver, что пользовательский import.
+- [ ] Реально прогнать все fixtures на GitHub Pages и зафиксировать PASS/known WARN.
+- [ ] Для fixtures прогнать `.gluestack save → open` editor-state round-trip.
+- [ ] Проверить destructive guards на unsupported fixtures.
 
-- [ ] primitive single-material;
-- [ ] multi-material + groups;
-- [ ] UV seams + several islands;
-- [ ] BaseColor/Normal/ORM/Emissive textures;
-- [ ] external `.gltf + .bin + textures`;
-- [ ] animated transform hierarchy;
-- [ ] skinned mesh;
-- [ ] morph targets;
-- [ ] custom BufferAttributes;
-- [ ] large/high-poly mesh;
-- [ ] intentionally malformed GLTF для negative tests.
+## P0.3 Project/data-loss hardening
 
-Для каждого поддерживаемого fixture:
+- [x] Dirty state.
+- [x] Save / Save As shortcuts.
+- [x] Close-tab protection.
+- [x] Autosave generation IDs.
+- [x] Previous autosave backup.
+- [x] Corrupted project detection.
+- [x] Transaction-like open.
+- [x] Current/previous project version policy.
+- [x] Clean runtime GLB clone strips `gluestack*` / `__gluestack*` keys.
+- [x] Diagnostics проверяет clean-export metadata leak.
+- [x] Diagnostics проверяет corrupted/newer project rejection.
+- [ ] Полный audit transient `userData` полей всех feature-модулей.
+- [ ] Migration fixture для настоящего `.gluestack v1`.
 
-- [ ] import → export → import сохраняет заявленную структуру;
-- [ ] `.gluestack save → open` сохраняет editor state;
-- [ ] unsupported операция блокируется до изменения данных;
-- [ ] Diagnostics показывает `PASS/WARN`, но не ложный `PASS` при потере данных.
+## P0.4 Modifier Stack production
 
-### Crash/data-loss protection
+- [x] Edit existing modifier params.
+- [x] Duplicate modifier.
+- [x] Drag reorder.
+- [x] Collapse/expand + persisted UI state.
+- [x] Explicit failed-modifier state.
+- [x] `Bake Through Here` для корректной mid-stack семантики.
+- [ ] Intermediate cache/invalidation для тяжёлых stacks.
+- [ ] Non-destructive Boolean либо окончательно documented destructive policy v1.
+- [ ] Stack-safe Duplicate object.
+- [ ] Stack-safe Apply Transform / Origin.
+- [ ] Source-cache lifecycle regression test после delete/open/bake/apply.
 
-- [ ] Dirty-state indicator: понятно, есть ли несохранённые изменения.
-- [ ] `Ctrl+S` / `Ctrl+Shift+S` для project save/save as.
-- [ ] Защита от закрытия вкладки при несохранённом проекте.
-- [ ] Autosave generation IDs, чтобы старый async autosave не мог перезаписать более новое состояние.
-- [ ] Backup предыдущего autosave snapshot, а не только один слот.
-- [ ] Corrupted `.gluestack` detection с понятной ошибкой и без удаления текущей сцены.
-- [ ] Transaction-like project load: новая сцена заменяет текущую только после успешного decode/parse/validation.
+## P0.5 Advanced UV release QA
 
-## P0 — Project format hardening
+Функциональный код уже реализован; теперь нужны regression/quality проверки.
 
-- [ ] Формально описать `.gluestack` header/version в коде и roadmap.
-- [ ] Migration layer `v1 → v2 → future`, а не проверки версии в разных местах.
-- [ ] Unknown/newer project version открывать read-only или блокировать с объяснением.
-- [ ] Не сохранять transient runtime fields в `userData`.
-- [ ] Проверять, что game-ready `.glb` не содержит internal gluestack metadata, временных helpers и editor-only nodes.
-- [ ] Добавить project integrity summary: meshes/materials/textures/animations/modifier stacks перед сохранением.
+- [x] Angle-based smart island segmentation.
+- [x] Non-planar harmonic/cotangent unwrap.
+- [x] Relax.
+- [x] Stretch heatmap.
+- [x] Bounding-box packer.
+- [x] 90° rotate during packing.
+- [x] Pixel padding / resolution.
+- [x] Aspect preservation.
+- [x] Pack Selected.
+- [x] Normalize 0..1.
+- [x] Texel density measure/set/match.
+- [x] Overlap/OOB/degenerate checks.
+- [x] Mirror/Align.
+- [x] Stitch/Weld.
+- [ ] UV golden fixtures: cube hard seams / cylinder / sphere / irregular organic mesh / hole topology.
+- [ ] Убедиться, что Relax не инвертирует UV triangles на supported fixtures.
+- [ ] Проверить packing overlap после rotation/padding на 100+ islands.
+- [ ] Worker/cancel для тяжёлого unwrap/pack — переносится в Performance P1, если P0 fixtures укладываются в интерактивное время.
 
-## P0 — Modifier Stack до production UX
+## P0.6 Game Ready optimizer v2
 
-Stack существует, но для нормального Blender-like workflow нужны следующие пункты:
+- [ ] Export profiles: Web / Godot / Unity / Generic glTF.
+- [ ] Safe ORM channel packing policy.
+- [ ] Texture resize 512/1K/2K/4K + memory preview.
+- [ ] Alpha/transparency protection policy.
+- [ ] Tangent generation/recalculation для compatible normal-mapped mesh.
+- [x] Negative scale / winding validation.
+- [x] Duplicate position-vertex warning.
+- [x] Non-manifold/open/degenerate validation.
+- [x] Material slot/group validation.
+- [ ] Duplicate texture-content detection.
+- [ ] Cleanup preview до Apply.
+- [x] `before → after` optimization report.
+- [x] Optimize остаётся одной Undo operation.
 
-- [ ] Редактирование параметров уже добавленного modifier без удаления/re-add.
-- [ ] Apply одного modifier из середины stack.
-- [ ] Duplicate modifier.
-- [ ] Drag reorder, а не только Up/Down.
-- [ ] Collapse/expand modifier cards.
-- [ ] Явный error state у modifier, который не может вычислиться после изменения предыдущего шага.
-- [ ] Cache/invalidation: не пересчитывать весь тяжёлый stack без необходимости.
-- [ ] Сохранять и восстанавливать UI-state stack в `.gluestack`.
-- [ ] Решить non-destructive Boolean как отдельный stack modifier либо оставить destructive и явно закрепить это как ограничение v1.
-- [ ] Безопасный workflow `Duplicate / Apply Transform / Origin` для Mesh со stack вместо постоянной блокировки.
+## P0.7 LOD policy
 
-## P0 — Advanced UV pipeline
-
-Текущий UV pipeline рабочий, но grid-packing и planar seam-islands недостаточны для сложных game assets.
-
-- [ ] Smart island segmentation по углу между гранями с настраиваемым threshold.
-- [ ] Unwrap solver для неплоских seam-islands вместо одной planar projection на island.
-- [ ] Relax/minimize stretch после unwrap.
-- [ ] Stretch heatmap / distortion overlay.
-- [ ] Pack Islands с реальными bounding boxes, а не фиксированной сеткой.
-- [ ] Разрешить rotation островов на `90°` при packing.
-- [ ] Настраиваемый padding в pixels при выбранном texture resolution.
-- [ ] Preserve island aspect ratio.
-- [ ] Pack only selected islands.
-- [ ] Normalize to 0..1 без изменения относительного texel density.
-- [ ] Texel Density: measure / set / match.
-- [ ] Detect overlap и out-of-bounds UV.
-- [ ] Detect zero-area/degenerate UV triangles.
-- [ ] UV mirror X/Y и island align tools.
-- [ ] Stitch/Weld UV edges.
-
-## P0 — Game Ready optimizer v2
-
-- [ ] Export profiles: `Web / Godot / Unity / Generic glTF` с минимальными безопасными отличиями.
-- [ ] Channel packing: Metallic + Roughness + AO в ORM/packed workflow там, где это безопасно.
-- [ ] Texture resize policy: 512/1K/2K/4K с preview итоговой памяти.
-- [ ] Потеря alpha/transparency при оптимизации должна блокироваться или явно подтверждаться.
-- [ ] Tangent generation/recalculation для normal mapped mesh.
-- [ ] Detect mirrored/negative scale и winding issues.
-- [ ] Detect duplicate vertices/materials/textures более строго.
-- [ ] Detect non-manifold/open edges и degenerate faces.
-- [ ] Detect material slots без реально используемых groups.
-- [ ] Scene cleanup preview: что именно будет удалено/объединено до Apply.
-- [ ] Optimization report `before → after`: triangles, vertices, materials, textures, GLB bytes.
-- [ ] Undo всего Optimize operation одной записью.
-
-## P0 — LOD policy
-
-- [ ] LOD ratios редактируемые пользователем.
-- [ ] Минимальный triangle floor для маленьких meshes.
-- [ ] Skip list для объектов, которые нельзя упрощать.
-- [ ] Preserve hard edges / normals policy.
-- [ ] Проверка визуальной ошибки simplification хотя бы через bounds/normal/UV sanity metrics.
-- [ ] Runtime metadata: screen coverage/distance thresholds для `LOD0/1/2`.
-- [ ] Export option: all LODs / only LOD0 / individual LOD files.
-- [ ] Не генерировать новый LOD поверх уже существующей LOD-chain без явного replace.
+- [ ] User-editable ratios.
+- [ ] Triangle floor.
+- [ ] Per-object skip flag.
+- [ ] Preserve hard-edge/normal policy.
+- [ ] Simplification sanity metrics.
+- [ ] Screen coverage/distance metadata.
+- [ ] Export all LODs / LOD0 only / individual LOD files.
+- [ ] Не заменять существующую LOD-chain без явного Replace.
 
 ---
 
 # P1 — Modeling UX
 
-## Object/Edit selection
+## Selection / topology
 
 - [ ] Box Select.
 - [ ] Circle Select.
-- [ ] Select All / Invert / None.
+- [ ] Select All / Invert / None в Object/Edit.
 - [ ] Select Linked.
 - [ ] Edge Loop Select.
 - [ ] Edge Ring Select.
-- [ ] Select by material.
-- [ ] Hide / Unhide selected components в Edit Mode.
-
-## Modeling tools
-
+- [ ] Select by Material.
+- [ ] Hide / Unhide Edit components.
 - [ ] Edge Slide / Vertex Slide.
 - [ ] Duplicate geometry внутри Edit Mode.
 - [ ] Separate by Selection / Material / Loose Parts.
 - [ ] Bridge Edge Loops.
-- [ ] Spin/Revolve базового уровня.
-- [ ] Face orientation overlay.
-- [ ] Auto Smooth / sharp-edge workflow для game assets.
+- [ ] Spin/Revolve.
+- [ ] Face Orientation overlay.
+- [ ] Auto Smooth / sharp-edge workflow.
 - [ ] Proportional Editing.
-- [ ] Snapping к Vertex / Edge / Face, а не только grid.
-- [ ] Transform orientation: Global / Local / Normal.
-- [ ] Pivot modes: Median / Individual Origins / Cursor.
+- [ ] Vertex / Edge / Face snapping.
+- [ ] Transform orientation Global / Local / Normal.
+- [ ] Pivot Median / Individual / Cursor.
 
 ## Blender-like navigation
 
-- [ ] N-panel/sidebar вместо части modal prompts.
+- [ ] N-sidebar.
 - [ ] `T` toolbar toggle.
-- [ ] 3D Cursor базового уровня.
+- [ ] 3D Cursor.
 - [ ] `Shift+S` snap menu.
 - [ ] `F3` command search.
-- [ ] Numpad emulation для клавиатур без numpad.
-- [ ] User-editable hotkey map в project/local settings.
+- [ ] Numpad emulation.
+- [ ] User-editable hotkeys.
 
 ---
 
-# P1 — Materials / Shading / Texture Paint
+# P1 — Materials / Paint
 
-- [ ] Material slot add/remove/reorder UI.
-- [ ] Assign selected faces to material slot в Edit Mode.
-- [ ] Duplicate/material unlink workflow.
-- [ ] Texture sampler controls: wrap/filter/aniso.
+- [ ] Material slot add/remove/reorder.
+- [ ] Assign selected faces to material slot.
+- [ ] Material duplicate/unlink.
+- [ ] Texture wrap/filter/aniso.
 - [ ] Normal scale.
-- [ ] Alpha Mode: Opaque / Mask / Blend + cutoff.
+- [ ] Alpha Opaque / Mask / Blend + cutoff.
 - [ ] Double-sided control.
-- [ ] Clearcoat/transmission/IOR только после решения glTF extension policy.
-- [ ] Material validation против экспортируемых glTF capabilities.
-- [ ] Paint Undo batching: один stroke = одна history operation.
+- [ ] glTF extension policy before Clearcoat/Transmission/IOR UI.
+- [ ] Material export validation.
+- [ ] One paint stroke = one Undo entry.
 - [ ] Brush hardness/falloff.
 - [ ] Eraser.
-- [ ] Color picker с модели/texture.
-- [ ] Fill bucket по UV island/material.
-- [ ] Seam-aware painting/padding для mipmap bleed.
-- [ ] Texture resolution create/resize UI.
-- [ ] Export painted texture отдельно от GLB.
+- [ ] Color picker from model/texture.
+- [ ] Fill by island/material.
+- [ ] Seam-aware paint padding.
+- [ ] Texture resolution create/resize.
+- [ ] Export painted texture separately.
 
 ---
 
 # P1 — Animation
 
-Dope Sheet реализован; следующий уровень:
-
 - [ ] Graph Editor workspace.
-- [ ] F-curves по Position / Rotation / Scale.
-- [ ] Handles/tangents для поддерживаемых interpolation modes.
-- [ ] Frame-based timeline с настраиваемым FPS.
-- [ ] Start/End playback range.
+- [ ] Position/Rotation/Scale F-curves.
+- [ ] Tangent/handle editing.
+- [ ] Frame timeline + FPS.
+- [ ] Start/End range.
 - [ ] Loop playback.
-- [ ] Duplicate keyframes.
-- [ ] Copy/Paste keyframes.
+- [ ] Duplicate / Copy / Paste keyframes.
 - [ ] Box Select keys.
 - [ ] Snap keys to frame/playhead.
-- [ ] Scale group of keys around pivot time.
-- [ ] Per-track mute/solo.
+- [ ] Scale group of keys around time pivot.
+- [ ] Track mute/solo.
 - [ ] Clip rename/duplicate.
-- [ ] Animation validation: missing target, duplicate target name, empty track, invalid times.
-- [ ] Skeleton/bone animation editing только после отдельного rig-safe design; не смешивать с обычным Object transform editor.
+- [ ] Missing-target / duplicate-name / invalid-time validation.
+- [ ] Bone animation editing только после отдельного rig-safe design.
 
 ---
 
-# P1 — Performance и большие сцены
+# P1 — Performance / большие сцены
 
-- [ ] Профилирование startup/load/edit/export на low/mid/high-poly fixtures.
-- [ ] Web Worker для тяжёлых CPU-задач: simplify, UV solve/pack, optimization.
-- [ ] Progress + cancel для операций дольше одного кадра.
-- [ ] Не блокировать UI при больших GLB encode/decode.
-- [ ] Adaptive pixel ratio при тяжёлой сцене.
-- [ ] Throttle selection helpers/Outliner refresh на больших сценах.
-- [ ] Lazy thumbnails/previews.
-- [ ] Memory panel в Diagnostics: geometries/materials/textures/render targets.
-- [ ] Detect oversized canvas textures после Texture Paint.
-- [ ] Проверить scenes с сотнями объектов без O(n²) selection/resource scans в hot path.
+- [ ] Startup/load/edit/export profiling на low/mid/high-poly fixtures.
+- [ ] Web Workers: simplify / UV solve-pack / optimization.
+- [ ] Progress + cancel для long tasks.
+- [ ] Non-blocking large GLB encode/decode.
+- [ ] Adaptive pixel ratio.
+- [ ] Throttled helpers/Outliner refresh.
+- [ ] Memory diagnostics panel.
+- [ ] Oversized CanvasTexture detection.
+- [ ] Hot-path audit на O(n²) scans.
 
 ---
 
 # P1 — Import / Export compatibility
 
-- [ ] Multiple glTF scenes: явный выбор или documented policy.
-- [ ] Cameras и punctual lights round-trip test.
-- [ ] SkinnedMesh round-trip без редактирования skin data.
-- [ ] Morph target round-trip без destructive edit.
-- [ ] Tangents / vertex colors / UV1+ round-trip tests.
-- [ ] Data URI resources в `.gltf`.
-- [ ] Duplicate filenames у sidecar textures из разных папок: conflict resolver.
-- [ ] Unsupported glTF extensions: список и warning до редактирования/экспорта.
-- [ ] Draco import policy.
-- [ ] KTX2/Basis texture import/export strategy.
-- [ ] Meshopt compression strategy.
-- [ ] Экспорт selected objects отдельно от всей сцены.
-- [ ] Export scale/up-axis presets только если не меняют модель молча.
+- [ ] Multiple glTF scenes policy.
+- [ ] Camera/punctual light golden test.
+- [ ] SkinnedMesh round-trip test.
+- [ ] Morph round-trip test.
+- [ ] Tangent / vertex color / UV1+ fixtures.
+- [ ] Data URI resources.
+- [ ] Sidecar duplicate-filename conflict resolver.
+- [ ] Unsupported glTF extensions warning.
+- [ ] Draco policy.
+- [ ] KTX2/Basis strategy.
+- [ ] Meshopt strategy.
+- [ ] Export Selected.
+- [ ] Safe scale/up-axis presets.
 
 ---
 
-# P1 — Project UX
+# P1 — Project UX / UI / PWA
 
-- [ ] Project browser вместо `prompt()` для Local Save/Open.
+- [ ] Project browser вместо prompts.
 - [ ] Rename / duplicate / delete local project.
 - [ ] Last opened projects.
-- [ ] Autosave timestamp и recovery preview.
-- [ ] Manual snapshot/checkpoint list.
+- [ ] Autosave timestamp/recovery preview.
+- [ ] Manual snapshots/checkpoints.
 - [ ] Project size estimate.
-- [ ] Clear local storage/project cache UI.
-- [ ] Import `.gluestack` drag-and-drop.
-- [ ] Drag-and-drop GLB/GLTF/textures во viewport.
-
----
-
-# P1 — UI / accessibility / PWA
-
-- [ ] Resizable Outliner/Properties/UV panels.
-- [ ] Persist panel sizes/layout locally.
-- [ ] Better focus management: shortcuts не срабатывают при вводе текста/чисел.
-- [ ] Tooltips с shortcut и кратким описанием операции.
-- [ ] Keyboard-only проход по основным controls.
-- [ ] ARIA labels для dynamic feature UI.
+- [ ] Local cache cleanup UI.
+- [ ] Drag/drop `.gluestack`, GLB/GLTF/textures.
+- [ ] Resizable panels + persisted layout.
+- [ ] Focus/shortcut audit.
+- [ ] Tooltips + ARIA + keyboard-only pass.
 - [ ] Contrast/focus-visible audit.
-- [ ] Touch/tablet navigation отдельно от desktop mouse bindings.
+- [ ] Touch/tablet navigation policy.
 - [ ] PWA installability audit.
-- [ ] Offline shell/service worker только после определения cache invalidation strategy.
-- [ ] OpenGraph/meta/portfolio preview для публичной страницы.
-- [ ] Loading screen/progress для тяжёлых dynamic modules и моделей.
+- [ ] Offline/service worker только после cache invalidation design.
+- [ ] OpenGraph/portfolio metadata.
+- [ ] Loading/progress screen для heavy modules/models.
 
 ---
 
-# P2 — Расширение после стабильного v1.0
-
-Эти задачи не должны задерживать первый стабильный релиз.
-
-## Advanced modeling
+# P2 — после стабильного v1.0
 
 - [ ] Curves / paths.
-- [ ] Text object → mesh.
-- [ ] Lattice/simple deformation tools.
-- [ ] Geometry Nodes-подобный procedural graph — только отдельным большим этапом.
-- [ ] Sculpting — отдельный продуктовый этап, не часть v1.
-
-## Procedural asset generators
-
-- [ ] Cliff.
-- [ ] Bush.
-- [ ] Fence.
-- [ ] Pier.
-- [ ] Road segment.
-- [ ] Stairs.
-- [ ] Arch.
-- [ ] Pipe/tube.
-- [ ] Roof.
-- [ ] Door/window.
-- [ ] Wheel.
-- [ ] Gear.
-- [ ] Terrain tile.
-- [ ] Parametric presets и random seed.
-
-## Advanced UV
-
-- [ ] Multiple UV sets editing.
+- [ ] Text → mesh.
+- [ ] Lattice/deform tools.
+- [ ] Geometry Nodes-подобный procedural graph — отдельный этап.
+- [ ] Sculpting — отдельный продуктовый этап.
+- [ ] Procedural Cliff / Bush / Fence / Pier / Road / Stairs / Arch / Pipe / Roof / Door / Window / Wheel / Gear / Terrain.
+- [ ] Parametric presets + random seed.
+- [ ] Multiple UV-set editing.
 - [ ] Lightmap UV generation.
-- [ ] UDIM — только если появится реальный use-case и понятный export policy.
-
-## Advanced animation
-
-- [ ] Constraints.
-- [ ] Drivers.
-- [ ] NLA-like clip sequencing.
-- [ ] Rig/bone editing — отдельная архитектура.
+- [ ] UDIM только при реальном use-case.
+- [ ] Animation constraints / drivers / NLA-like sequencing.
+- [ ] Rig/bone editor — отдельная архитектура.
 
 ---
 
 # Release gates v1.0
 
-`v1.0` можно считать готовым только когда одновременно выполнены все пункты:
+`v1.0` готов только когда одновременно выполнены:
 
-- [ ] P0 Production Integrity закрыт.
-- [ ] Полный smoke-test GitHub Pages пройден минимум в Chrome/Edge/Firefox desktop.
-- [ ] Diagnostics на golden fixtures не содержит необъяснённых `FAIL`.
-- [ ] Нет известного сценария, где поддерживаемая операция молча теряет UV/material/animation/project data.
-- [ ] `.gluestack` migration/recovery проверены минимум на текущей и предыдущей версии формата.
+- [ ] P0 browser QA закрыт в Chrome/Edge/Firefox desktop.
+- [ ] Golden fixtures не имеют необъяснённых `FAIL`.
+- [ ] Нет известного silent data-loss для поддерживаемой операции.
+- [ ] `.gluestack v1 → v2` migration/recovery реально протестированы.
 - [ ] Import → edit → save → reopen → export → reimport пройден на golden fixtures.
-- [ ] Повторный project load не оставляет stale selection/gizmo/resources.
-- [ ] Game Ready report совпадает с реально экспортированным GLB.
-- [ ] README содержит только актуальное описание, возможности, ограничения, Pages link, лицензии и ссылку на roadmap.
-- [ ] `THIRD_PARTY_LICENSES.md` соответствует реально подключённым зависимостям.
-- [ ] В репозитории нет дублирующих старых реализаций, забытых prototype-файлов и неиспользуемых assets.
-- [ ] `portfolio.png`, favicon/PWA assets и публичные metadata соответствуют текущему продукту.
+- [ ] Repeat project load не оставляет stale selection/gizmo/resources.
+- [ ] Advanced UV regression fixtures пройдены.
+- [ ] Game Ready report соответствует реально экспортированному GLB.
+- [ ] README содержит только актуальное описание, Pages link, возможности/ограничения, licenses, roadmap.
+- [ ] `THIRD_PARTY_LICENSES.md` соответствует runtime dependencies.
+- [ ] Нет duplicate/obsolete prototype files/assets/code paths.
+- [ ] Portfolio/favicon/PWA metadata соответствуют текущему продукту.
 
-## Следующий порядок работ
+## Текущий порядок работ
 
-1. **P0 browser QA + golden fixtures + project data-loss protection.**
-2. **Advanced UV unwrap/packing.**
-3. **Modifier Stack production UX.**
-4. **Game Ready optimizer v2 + LOD policy.**
+1. **P0 browser/golden QA — запуск остаётся обязательным release gate.**
+2. **Завершить Game Ready optimizer v2.**
+3. **LOD policy + export modes.**
+4. **Modifier Stack caching + stack-safe object operations.**
 5. **Import/export compatibility hardening.**
-6. **Performance/Workers.**
-7. **Graph Editor и P1 modeling UX.**
+6. **Performance/workers.**
+7. **P1 Modeling UX + Graph Editor.**
 8. **Release audit → v1.0.**
 
-Если новая задача не относится к P0/P1 и не исправляет реальный дефект, она не должна вытеснять release blockers из этого порядка.
+Если новая задача не исправляет реальный defect и не относится к P0/P1, она не должна вытеснять release blockers.
