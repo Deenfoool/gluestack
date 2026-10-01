@@ -1,3 +1,5 @@
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
+import { sanitizeRootUserData } from '../runtime/metadata-policy.js';
 import {
   CURRENT_PROJECT_VERSION,
   PROJECT_FORMAT,
@@ -114,7 +116,8 @@ export class ProjectController {
   async exportSceneBuffer({ project = false } = {}) {
     const stack = project ? await this.waitForModifierStack() : null;
     const payload = stack?.createProjectExportRoot?.() ?? null;
-    const root = payload?.root ?? this.editor.modelRoot;
+    const root = payload?.root ?? (project ? cloneSkeleton(this.editor.modelRoot) : this.editor.modelRoot);
+    if (project) sanitizeRootUserData(root, 'project');
     try {
       return await new Promise((resolve, reject) => {
         this.editor.exporter.parse(
@@ -161,6 +164,7 @@ export class ProjectController {
       textures: textures.size,
       animations: this.editor.animations?.length ?? 0,
       modifierStacks,
+      userData: this.editor.metadataPolicy?.audit?.().counts ?? null,
     };
   }
 
@@ -271,7 +275,6 @@ export class ProjectController {
 
   async openProjectBuffer(buffer) {
     const { metadata, glb } = this.decodeProject(buffer);
-    // Parse and validate completely before touching the current live scene.
     const prepared = await this.prepareGlbBuffer(glb);
     await this.commitPreparedProject(prepared, metadata);
     return metadata;
