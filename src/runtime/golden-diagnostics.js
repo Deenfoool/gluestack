@@ -1,6 +1,57 @@
 import { refreshIcons } from '../ui.js';
 
-export function installGoldenDiagnostics({ editor, diagnostics }) {
+function disposeParsedScene(root) {
+  const textures = new Set();
+  root?.traverse?.((object) => {
+    object.geometry?.dispose?.();
+    const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
+    for (const material of materials) {
+      for (const key of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap']) {
+        if (material?.[key]?.isTexture) textures.add(material[key]);
+      }
+      material?.dispose?.();
+    }
+  });
+  textures.forEach((texture) => texture.dispose());
+}
+
+async function externalSidecarFixture(importer) {
+  if (!importer?.parseFiles) {
+    return { name: 'external .gltf + .bin + texture', ok: false, detail: 'importer.parseFiles unavailable' };
+  }
+
+  const specs = [
+    ['fixture.gltf', 'model/gltf+json'],
+    ['mesh.bin', 'application/octet-stream'],
+    ['albedo.png', 'image/png'],
+  ];
+  const files = [];
+  try {
+    for (const [name, type] of specs) {
+      const url = new URL(`../../tests/fixtures/external/${name}`, import.meta.url);
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`${name}: HTTP ${response.status}`);
+      files.push(new File([await response.blob()], name, { type }));
+    }
+
+    const parsed = await importer.parseFiles(files);
+    let mesh = null;
+    parsed.gltf.scene.traverse((object) => { if (!mesh && object.isMesh) mesh = object; });
+    const material = Array.isArray(mesh?.material) ? mesh.material[0] : mesh?.material;
+    const position = mesh?.geometry?.getAttribute?.('position');
+    const uv = mesh?.geometry?.getAttribute?.('uv');
+    const ok = Boolean(mesh && position?.count === 3 && uv?.count === 3 && material?.map?.isTexture);
+    const detail = ok
+      ? `mesh ${position.count} vertices · UV ${uv.count} · external texture resolved`
+      : 'sidecar parse completed but expected mesh/UV/texture was not preserved';
+    disposeParsedScene(parsed.gltf.scene);
+    return { name: 'external .gltf + .bin + texture', ok, detail };
+  } catch (error) {
+    return { name: 'external .gltf + .bin + texture', ok: false, detail: error.message || String(error) };
+  }
+}
+
+export function installGoldenDiagnostics({ editor, diagnostics, importer }) {
   if (!editor || !diagnostics || editor.__gluestackGoldenDiagnostics) return editor?.__gluestackGoldenDiagnostics ?? null;
   const menu = diagnostics.menu?.querySelector('.menu-popover');
   if (!menu) return null;
@@ -17,6 +68,7 @@ export function installGoldenDiagnostics({ editor, diagnostics }) {
     try {
       const { runGoldenFixtures } = await import('../../tests/fixtures/golden-fixtures.js');
       const results = await runGoldenFixtures(editor);
+      results.push(await externalSidecarFixture(importer));
       const failed = results.filter((item) => !item.ok);
       console.table(results.map((item) => ({ status: item.ok ? 'PASS' : 'FAIL', ...item })));
       editor.events.onStatus(failed.length ? `Golden fixtures: ${failed.length} FAIL` : `Golden fixtures: PASS · ${results.length}/${results.length}`);
