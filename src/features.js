@@ -110,6 +110,16 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     }),
   );
 
+  const uvIslandTools = await loadAndInstall(
+    editor,
+    'UV island tools',
+    () => import('./uv/island-tools.js'),
+    ({ installUVIslandTools }) => installUVIslandTools({
+      controller: uv?.controller,
+      workspace: document.querySelector('#uv-workspace'),
+    }),
+  );
+
   const materials = await loadAndInstall(
     editor,
     'Materials',
@@ -192,6 +202,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     smartIslands,
     harmonicUnwrap,
     uvRelax,
+    uvIslandTools,
     materials,
     projects,
     gameReady,
