@@ -32,6 +32,17 @@ export function installDataIntegrity({ editor, editMode }) {
     };
   }
 
+  const uvStackGuard = (event) => {
+    const tab = event.target?.closest?.('.workspace-tab');
+    if (!tab || tab.dataset.workspace !== 'uv') return;
+    const mesh = editor.selected;
+    if (!editor.modifierStack?.hasStack?.(mesh)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    editor.events.onStatus('UV Editing отменён: сначала Apply Stack или Clear Stack');
+  };
+  document.addEventListener('click', uvStackGuard, true);
+
   const originalJoin = editor.joinSelected.bind(editor);
   editor.joinSelected = () => {
     const meshes = editor.getTopLevelSelection().filter((object) => object.isMesh && !object.isSkinnedMesh);
@@ -57,7 +68,11 @@ export function installDataIntegrity({ editor, editMode }) {
 
   return {
     editGuarded: Boolean(editMode?.enter),
+    uvStackGuarded: true,
     joinGuarded: true,
     modifierStackGuarded: true,
+    dispose() {
+      document.removeEventListener('click', uvStackGuard, true);
+    },
   };
 }
