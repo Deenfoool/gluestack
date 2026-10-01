@@ -5,11 +5,13 @@ import { installFeatures } from './features.js';
 import { installSelectionTools } from './runtime/selection-tools.js';
 import { installBoxSelect } from './runtime/box-select.js';
 import { installCircleSelect } from './runtime/circle-select.js';
+import { installAdvancedEditSelection } from './runtime/edit-selection-advanced.js';
 
 export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snapButton, openAddMenu, requestNumber }) {
   const selectionTools = installSelectionTools({ editor, editMode });
   const boxSelect = installBoxSelect({ editor, editMode });
   const circleSelect = installCircleSelect({ editor, editMode });
+  const advancedSelection = installAdvancedEditSelection({ editMode });
   installFeatures({ editor, editMode, knifeTool, requestNumber });
 
   window.addEventListener('keydown', (event) => {
@@ -82,6 +84,8 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
       if (event.code === 'KeyA' && !commandKey) { event.preventDefault(); editMode.selectAll(); return; }
       if (commandKey && event.code === 'KeyI') { event.preventDefault(); selectionTools.editInvert(); return; }
       if (!commandKey && !event.altKey && event.code === 'KeyL') { event.preventDefault(); selectionTools.editLinked(); return; }
+      if (commandKey && event.altKey && event.code === 'KeyR') { event.preventDefault(); advancedSelection.selectEdgeRing(); return; }
+      if (event.shiftKey && !commandKey && !event.altKey && event.code === 'KeyM') { event.preventDefault(); advancedSelection.selectByMaterial(); return; }
       if (!commandKey && !event.altKey && event.code === 'KeyB') { event.preventDefault(); boxSelect?.begin(); return; }
       if (!commandKey && !event.altKey && event.code === 'KeyC') { event.preventDefault(); circleSelect?.begin(); return; }
       if (commandKey && event.code === 'KeyB') {
