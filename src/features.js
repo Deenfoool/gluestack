@@ -24,6 +24,13 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     ({ installAnimations }) => installAnimations(editor),
   );
 
+  const cleanExport = await loadAndInstall(
+    editor,
+    'Clean GLB export',
+    () => import('./runtime/export-clean.js'),
+    ({ installCleanExport }) => installCleanExport(editor),
+  );
+
   const animationEditor = await loadAndInstall(
     editor,
     'Animation editor',
@@ -155,6 +162,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     animationEditor,
     dopeSheet,
     modifierStack,
+    cleanExport,
   };
 
   const diagnostics = await loadAndInstall(
