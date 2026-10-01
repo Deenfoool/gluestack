@@ -91,6 +91,15 @@ function updateSceneInputs(editor) {
   set('#scene-far', editor.camera.far);
 }
 
+function restoreLightState(editor, viewport) {
+  if (!viewport) return;
+  const { hemi, key, fill } = helperLights(editor);
+  if (hemi && Number.isFinite(viewport.hemisphereIntensity)) hemi.intensity = Math.max(0, viewport.hemisphereIntensity);
+  if (key && Number.isFinite(viewport.keyIntensity)) key.intensity = Math.max(0, viewport.keyIntensity);
+  if (fill && Number.isFinite(viewport.fillIntensity)) fill.intensity = Math.max(0, viewport.fillIntensity);
+  updateSceneInputs(editor);
+}
+
 function installProjectState(editor, projects) {
   if (!projects || projects.__gluestackExtendedState) return;
   projects.__gluestackExtendedState = true;
@@ -101,13 +110,8 @@ function installProjectState(editor, projects) {
     const { hemi, key, fill } = helperLights(editor);
     return {
       ...metadata,
-      version: 2,
       viewport: {
-        background: editor.scene.background?.isColor ? editor.scene.background.getHex() : null,
-        exposure: editor.renderer.toneMappingExposure,
-        cameraNear: editor.camera.near,
-        cameraFar: editor.camera.far,
-        cameraUp: editor.camera.up.toArray(),
+        ...(metadata.viewport ?? {}),
         hemisphereIntensity: hemi?.intensity ?? null,
         keyIntensity: key?.intensity ?? null,
         fillIntensity: fill?.intensity ?? null,
@@ -115,27 +119,10 @@ function installProjectState(editor, projects) {
     };
   };
 
-  const originalLoad = projects.loadGlbBuffer.bind(projects);
-  projects.loadGlbBuffer = async (buffer, metadata = {}) => {
-    await originalLoad(buffer, metadata);
-    const viewport = metadata.viewport;
-    if (!viewport) return;
-
-    if (Number.isInteger(viewport.background) && editor.scene.background?.isColor) {
-      editor.scene.background.setHex(viewport.background);
-    }
-    if (Number.isFinite(viewport.exposure)) editor.renderer.toneMappingExposure = viewport.exposure;
-    if (Number.isFinite(viewport.cameraNear)) editor.camera.near = Math.max(0.0001, viewport.cameraNear);
-    if (Number.isFinite(viewport.cameraFar)) editor.camera.far = Math.max(editor.camera.near + 0.01, viewport.cameraFar);
-    if (Array.isArray(viewport.cameraUp) && viewport.cameraUp.length >= 3) editor.camera.up.fromArray(viewport.cameraUp);
-
-    const { hemi, key, fill } = helperLights(editor);
-    if (hemi && Number.isFinite(viewport.hemisphereIntensity)) hemi.intensity = Math.max(0, viewport.hemisphereIntensity);
-    if (key && Number.isFinite(viewport.keyIntensity)) key.intensity = Math.max(0, viewport.keyIntensity);
-    if (fill && Number.isFinite(viewport.fillIntensity)) fill.intensity = Math.max(0, viewport.fillIntensity);
-    editor.camera.updateProjectionMatrix();
-    editor.orbit.update();
-    updateSceneInputs(editor);
+  const originalCommitPrepared = projects.commitPreparedProject.bind(projects);
+  projects.commitPreparedProject = async (prepared, metadata = {}) => {
+    await originalCommitPrepared(prepared, metadata);
+    restoreLightState(editor, metadata.viewport);
   };
 }
 
