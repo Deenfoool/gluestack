@@ -128,7 +128,8 @@ export function renderStats(editor, editMode, sceneStats) {
   const stats = editor.getStats();
   if (editMode.active) {
     const mode = editMode.selectionMode[0].toUpperCase() + editMode.selectionMode.slice(1);
-    sceneStats.textContent = `${mode} ${editMode.selectedCount()} selected · V ${editMode.vertices.length.toLocaleString()} · E ${editMode.edges.length.toLocaleString()} · F ${editMode.faceGroups.length.toLocaleString()} · Triangles ${stats.triangles.toLocaleString()}`;
+    const edgeCount = editMode.logicalEdges?.length ?? editMode.edges.length;
+    sceneStats.textContent = `${mode} ${editMode.selectedCount()} selected · V ${editMode.vertices.length.toLocaleString()} · E ${edgeCount.toLocaleString()} · F ${editMode.faceGroups.length.toLocaleString()} · Triangles ${stats.triangles.toLocaleString()}`;
     return;
   }
   const selected = editor.getSelectedObjects().length;
