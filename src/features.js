@@ -12,6 +12,7 @@ async function loadAndInstall(editor, name, loader, installer) {
 export async function installFeatures({ editor, editMode, knifeTool, requestNumber }) {
   const resources = await loadAndInstall(editor, 'Resource ownership', () => import('./runtime/resource-ownership.js'), ({ installResourceOwnership }) => installResourceOwnership(editor));
   const animations = await loadAndInstall(editor, 'Animations', () => import('./runtime/animations.js'), ({ installAnimations }) => installAnimations(editor));
+  const metadataPolicy = await loadAndInstall(editor, 'Metadata policy', () => import('./runtime/metadata-policy.js'), ({ installMetadataPolicy }) => installMetadataPolicy(editor));
   const cleanExport = await loadAndInstall(editor, 'Clean GLB export', () => import('./runtime/export-clean.js'), ({ installCleanExport }) => installCleanExport(editor));
   const animationEditor = await loadAndInstall(editor, 'Animation editor', () => import('./runtime/animation-editor.js'), ({ installAnimationEditor }) => installAnimationEditor(editor));
   const dopeSheet = await loadAndInstall(editor, 'Dope Sheet', () => import('./runtime/dope-sheet.js'), ({ installDopeSheet }) => installDopeSheet(editor));
@@ -40,6 +41,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
   const gameReadyValidator = await loadAndInstall(editor, 'Game Ready validator v2', () => import('./game-ready/validator-v2.js'), ({ installGameReadyValidatorV2 }) => installGameReadyValidatorV2({ editor, gameReady }));
   const lodPolicy = await loadAndInstall(editor, 'LOD policy', () => import('./game-ready/lod-policy.js'), ({ installLODPolicy }) => installLODPolicy({ editor, gameReady }));
   const optimizerV2 = await loadAndInstall(editor, 'Game Ready optimizer v2', () => import('./game-ready/optimizer-v2.js'), ({ installGameReadyOptimizerV2 }) => installGameReadyOptimizerV2({ editor, gameReady }));
+  const cleanupAudit = await loadAndInstall(editor, 'Cleanup Preview', () => import('./game-ready/cleanup-audit.js'), ({ installCleanupAudit }) => installCleanupAudit({ editor, gameReady }));
   const integrity = await loadAndInstall(editor, 'Data integrity', () => import('./runtime/data-integrity.js'), ({ installDataIntegrity }) => installDataIntegrity({ editor, editMode, gameReady }));
   const paint = await loadAndInstall(editor, 'Texture Paint', () => import('./paint/integration.js'), ({ installTexturePaint }) => installTexturePaint({ editor, editMode, knifeTool, materials }));
   const procedural = await loadAndInstall(editor, 'Procedural', () => import('./procedural/integration.js'), ({ installProceduralGenerators }) => installProceduralGenerators({ editor }));
@@ -64,9 +66,9 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
 
   const installed = {
     uv, advancedUV, smartIslands, harmonicUnwrap, uvRelax, uvIslandTools,
-    materials, projects, gameReady, gameReadyValidator, lodPolicy, optimizerV2,
+    materials, projects, gameReady, gameReadyValidator, lodPolicy, optimizerV2, cleanupAudit,
     paint, procedural, scene, hardening, resources, importer, integrity,
-    viewportHistory, animations, animationEditor, dopeSheet, modifierStack, cleanExport,
+    viewportHistory, animations, animationEditor, dopeSheet, modifierStack, metadataPolicy, cleanExport,
   };
 
   const diagnostics = await loadAndInstall(editor, 'Diagnostics', () => import('./runtime/diagnostics.js'), ({ installDiagnostics }) => installDiagnostics({ editor, projects, features: installed }));
