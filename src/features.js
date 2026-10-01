@@ -11,6 +11,7 @@ async function loadAndInstall(editor, name, loader, installer) {
 
 export async function installFeatures({ editor, editMode, knifeTool, requestNumber }) {
   const resources = await loadAndInstall(editor, 'Resource ownership', () => import('./runtime/resource-ownership.js'), ({ installResourceOwnership }) => installResourceOwnership(editor));
+  const transformIntegrity = await loadAndInstall(editor, 'Transform integrity', () => import('./runtime/transform-integrity.js'), ({ installTransformIntegrity }) => installTransformIntegrity(editor));
   const animations = await loadAndInstall(editor, 'Animations', () => import('./runtime/animations.js'), ({ installAnimations }) => installAnimations(editor));
   const metadataPolicy = await loadAndInstall(editor, 'Metadata policy', () => import('./runtime/metadata-policy.js'), ({ installMetadataPolicy }) => installMetadataPolicy(editor));
   const cleanExport = await loadAndInstall(editor, 'Clean GLB export', () => import('./runtime/export-clean.js'), ({ installCleanExport }) => installCleanExport(editor));
@@ -69,7 +70,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
   const installed = {
     uv, advancedUV, smartIslands, harmonicUnwrap, uvRelax, uvIslandTools,
     materials, projects, gameReady, gameReadyValidator, lodPolicy, optimizerV2, exportProfiles, cleanupAudit,
-    paint, procedural, scene, hardening, resources, importer, integrity,
+    paint, procedural, scene, hardening, resources, transformIntegrity, importer, integrity,
     viewportHistory, animations, animationEditor, dopeSheet, modifierStack, metadataPolicy, cleanExport, exportSelected,
   };
 
