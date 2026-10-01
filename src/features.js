@@ -172,7 +172,14 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     ({ installDiagnostics }) => installDiagnostics({ editor, projects, features: installed }),
   );
 
-  const result = { ...installed, diagnostics };
+  const goldenDiagnostics = await loadAndInstall(
+    editor,
+    'Golden fixtures',
+    () => import('./runtime/golden-diagnostics.js'),
+    ({ installGoldenDiagnostics }) => installGoldenDiagnostics({ editor, diagnostics }),
+  );
+
+  const result = { ...installed, diagnostics, goldenDiagnostics };
   const failed = Object.entries(result).filter(([, value]) => !value).map(([name]) => name);
   if (failed.length) editor.events.onStatus(`Базовый редактор готов · не загрузились: ${failed.join(', ')}`);
   else editor.events.onStatus('Готово · все дополнительные модули подключены');
