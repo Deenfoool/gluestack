@@ -266,7 +266,7 @@ $$('[data-primitive]').forEach((button) => {
 });
 $$('[data-transform-mode]').forEach((button) => {
   button.addEventListener('click', () => {
-    if (transformModal.state) transformModal.cancel(true);
+    if (transformModal.state) transformModal.commit();
     knifeTool.cancel(true);
     setTransformMode(button.dataset.transformMode);
   });
