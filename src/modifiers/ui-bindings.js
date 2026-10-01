@@ -24,7 +24,7 @@ async function runBoolean(modifiers, operation) {
   }
   const selected = modifiers.editor.getTopLevelSelection?.() ?? [];
   if (modifiers.stack?.hasStack && selected.some((mesh) => modifiers.stack.hasStack(mesh))) {
-    modifiers.onStatus('Boolean: сначала Apply Stack или Clear Stack на выбранных Mesh');
+    modifiers.onStatus('Boolean destructive v1: сначала Apply Stack или Clear Stack на выбранных Mesh');
     return false;
   }
   try {
@@ -42,12 +42,6 @@ async function runBoolean(modifiers, operation) {
 export function bindModifierControls(modifiers, root = document) {
   modifiers.stackReady ??= import('./stack.js')
     .then(({ installModifierStack }) => installModifierStack({ editor: modifiers.editor, modifiers }))
-    .then(async (stack) => {
-      if (!stack) return null;
-      const { installModifierStackWorkspaceGuard } = await import('./stack-guard.js');
-      installModifierStackWorkspaceGuard(modifiers.editor);
-      return stack;
-    })
     .catch((error) => {
       console.error('[gluestack] Modifier Stack failed to load', error);
       modifiers.onStatus(`Modifier Stack недоступен: ${error.message || error}`);
@@ -56,12 +50,7 @@ export function bindModifierControls(modifiers, root = document) {
   modifiers.editor.modifierStackReady = modifiers.stackReady;
 
   root.querySelectorAll('[data-modifier-mirror]').forEach((button) => {
-    button.addEventListener('click', async () => stackAdd(
-      modifiers,
-      'mirror',
-      { axis: button.dataset.modifierMirror },
-      () => modifiers.applyMirror(button.dataset.modifierMirror),
-    ));
+    button.addEventListener('click', async () => stackAdd(modifiers, 'mirror', { axis: button.dataset.modifierMirror }, () => modifiers.applyMirror(button.dataset.modifierMirror)));
   });
 
   root.querySelector('[data-modifier-array]')?.addEventListener('click', async () => {
@@ -69,12 +58,7 @@ export function bindModifierControls(modifiers, root = document) {
     const x = inputNumber(root, '#modifier-array-x', 2);
     const y = inputNumber(root, '#modifier-array-y', 0);
     const z = inputNumber(root, '#modifier-array-z', 0);
-    await stackAdd(
-      modifiers,
-      'array',
-      { count, x, y, z },
-      () => modifiers.applyArray(count, new THREE.Vector3(x, y, z)),
-    );
+    await stackAdd(modifiers, 'array', { count, x, y, z }, () => modifiers.applyArray(count, new THREE.Vector3(x, y, z)));
   });
 
   root.querySelector('[data-modifier-solidify]')?.addEventListener('click', async () => {
