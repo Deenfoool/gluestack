@@ -1,21 +1,9 @@
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
-
-const EDITOR_ONLY_PREFIXES = ['gluestack', '__gluestack'];
-
-function isEditorOnlyKey(key) {
-  return EDITOR_ONLY_PREFIXES.some((prefix) => key.startsWith(prefix));
-}
-
-function cleanUserData(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
-  return Object.fromEntries(Object.entries(value).filter(([key]) => !isEditorOnlyKey(key)));
-}
+import { sanitizeRootUserData } from './metadata-policy.js';
 
 export function createCleanExportRoot(editor) {
   const root = cloneSkeleton(editor.modelRoot);
-  root.traverse((object) => {
-    object.userData = cleanUserData(object.userData ?? {});
-  });
+  sanitizeRootUserData(root, 'runtime');
   return root;
 }
 
