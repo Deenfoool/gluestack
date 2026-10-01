@@ -16,6 +16,15 @@ import {
   recalculateNormals,
 } from './operations.js';
 
+function logicalEdges(edges, triangleToFaceGroup) {
+  return edges.filter((edge) => {
+    if (!edge?.triangles?.length) return false;
+    if (edge.triangles.length !== 2) return true;
+    const [a, b] = edge.triangles;
+    return triangleToFaceGroup?.[a] !== triangleToFaceGroup?.[b];
+  });
+}
+
 export class EditModeController {
   constructor(editor, events = {}) {
     this.editor = editor;
@@ -29,6 +38,7 @@ export class EditModeController {
     this.vertices = [];
     this.triangles = [];
     this.edges = [];
+    this.logicalEdges = [];
     this.faceGroups = [];
     this.triangleToFaceGroup = [];
     this.sourceFaceToTriangle = [];
@@ -107,12 +117,18 @@ export class EditModeController {
     this.editor.selectionBoxes.length = 0;
   }
 
+  updateLogicalEdges() {
+    this.logicalEdges = logicalEdges(this.edges, this.triangleToFaceGroup);
+  }
+
   loadTopology() {
     Object.assign(this, readMeshTopology(this.mesh));
+    this.updateLogicalEdges();
   }
 
   rebuildTopologyOnly() {
     Object.assign(this, buildTopology(this.vertices, this.triangles));
+    this.updateLogicalEdges();
   }
 
   handlePointerUp(event) {
@@ -137,7 +153,9 @@ export class EditModeController {
     if (this.selectionMode === 'edge') {
       this.editor.raycaster.params.Line.threshold = 0.08;
       const hit = this.editor.raycaster.intersectObject(this.overlay.lines, false)[0];
-      this.selectComponent(hit ? Math.floor((hit.index ?? 0) / 2) : null, additive);
+      const visibleIndex = hit ? Math.floor((hit.index ?? 0) / 2) : -1;
+      const key = visibleIndex >= 0 ? this.overlay.edgeKeys[visibleIndex] : null;
+      this.selectEdgeKey(key, additive);
       return;
     }
 
@@ -147,11 +165,23 @@ export class EditModeController {
     this.selectComponent(faceGroup >= 0 ? faceGroup : null, additive);
   }
 
+  selectEdgeKey(key, additive = false) {
+    const set = this.selectedEdges;
+    if (!additive) set.clear();
+    if (key !== null && key !== undefined) {
+      if (additive && set.has(key)) set.delete(key);
+      else set.add(key);
+    }
+    this.refreshOverlay();
+    this.updatePivot();
+    this.emitChange();
+  }
+
   selectComponent(index, additive = false) {
     const set = this.currentSelectionSet();
     if (!additive) set.clear();
     if (index !== null && index !== undefined) {
-      const key = this.selectionMode === 'edge' ? this.edges[index]?.key : index;
+      const key = this.selectionMode === 'edge' ? this.logicalEdges[index]?.key : index;
       if (key !== undefined) {
         if (additive && set.has(key)) set.delete(key);
         else set.add(key);
@@ -188,7 +218,7 @@ export class EditModeController {
     const set = this.currentSelectionSet();
     set.clear();
     if (this.selectionMode === 'vertex') this.vertices.forEach((_, index) => set.add(index));
-    else if (this.selectionMode === 'edge') this.edges.forEach((edge) => set.add(edge.key));
+    else if (this.selectionMode === 'edge') this.logicalEdges.forEach((edge) => set.add(edge.key));
     else this.faceGroups.forEach((group) => set.add(group.id));
     this.refreshOverlay();
     this.updatePivot();
@@ -206,7 +236,7 @@ export class EditModeController {
     if (this.selectionMode === 'vertex') return new Set(this.selectedVertices);
     if (this.selectionMode === 'edge') {
       const result = new Set();
-      for (const edge of this.edges) {
+      for (const edge of this.logicalEdges) {
         if (!this.selectedEdges.has(edge.key)) continue;
         result.add(edge.a);
         result.add(edge.b);
@@ -237,8 +267,9 @@ export class EditModeController {
     if (!this.active) return;
     this.overlay.refresh({
       vertices: this.vertices,
-      edges: this.edges,
+      edges: this.logicalEdges,
       triangles: this.triangles,
+      triangleToFaceGroup: this.triangleToFaceGroup,
       selectionMode: this.selectionMode,
       selectedVertices: this.getSelectedVertexIds(),
       selectedEdges: this.selectedEdges,
@@ -370,7 +401,7 @@ export class EditModeController {
       selectionMode: this.selectionMode,
       selectedCount: this.selectedCount(),
       vertexCount: this.vertices.length,
-      edgeCount: this.edges.length,
+      edgeCount: this.logicalEdges.length,
       faceCount: this.faceGroups.length,
     });
   }
