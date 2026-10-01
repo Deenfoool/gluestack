@@ -11,8 +11,8 @@ function migrateV1ToV2(metadata) {
   const next = structuredClone(metadata);
   next.version = 2;
   next.editor = {
-    snapEnabled: Boolean(next.editor?.snapEnabled),
     ...asObject(next.editor),
+    snapEnabled: Boolean(next.editor?.snapEnabled),
   };
   next.selection = {
     ids: Array.isArray(next.selection?.ids) ? next.selection.ids : [],
@@ -58,7 +58,10 @@ export function normalizeProjectMetadata(input) {
     ids: Array.isArray(metadata.selection?.ids) ? metadata.selection.ids.filter((id) => typeof id === 'string') : [],
     activeId: typeof metadata.selection?.activeId === 'string' ? metadata.selection.activeId : null,
   };
-  metadata.editor = asObject(metadata.editor);
+  metadata.editor = {
+    ...asObject(metadata.editor),
+    snapEnabled: Boolean(metadata.editor?.snapEnabled),
+  };
   metadata.viewport = asObject(metadata.viewport);
   metadata.integrity = asObject(metadata.integrity);
   return metadata;
