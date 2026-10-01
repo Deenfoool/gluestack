@@ -76,8 +76,9 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
   const metadataAudit = await loadAndInstall(editor, 'Metadata audit', () => import('./runtime/metadata-audit.js'), ({ installMetadataAudit }) => installMetadataAudit({ editor, projects, diagnostics }));
   const goldenDiagnostics = await loadAndInstall(editor, 'Golden fixtures', () => import('./runtime/golden-diagnostics.js'), ({ installGoldenDiagnostics }) => installGoldenDiagnostics({ editor, diagnostics, importer, projects }));
   const uvGoldenDiagnostics = await loadAndInstall(editor, 'UV Golden fixtures', () => import('./runtime/uv-golden-diagnostics.js'), ({ installUVGoldenDiagnostics }) => installUVGoldenDiagnostics({ editor, diagnostics, uv, advancedUV }));
+  const modifierStackDiagnostics = await loadAndInstall(editor, 'Modifier Stack diagnostics', () => import('./runtime/modifier-stack-diagnostics.js'), ({ installModifierStackDiagnostics }) => installModifierStackDiagnostics({ editor, diagnostics, modifierStack }));
 
-  const result = { ...installed, diagnostics, metadataAudit, goldenDiagnostics, uvGoldenDiagnostics };
+  const result = { ...installed, diagnostics, metadataAudit, goldenDiagnostics, uvGoldenDiagnostics, modifierStackDiagnostics };
   const failed = Object.entries(result).filter(([, value]) => !value).map(([name]) => name);
   if (failed.length) editor.events.onStatus(`Базовый редактор готов · не загрузились: ${failed.join(', ')}`);
   else editor.events.onStatus('Готово · все дополнительные модули подключены');
