@@ -7,8 +7,10 @@ export function createCleanExportRoot(editor) {
   return root;
 }
 
-export async function exportCleanGlbBuffer(editor) {
+export async function exportCleanGlbBuffer(editor, options = {}) {
   const root = createCleanExportRoot(editor);
+  const profile = editor.exportProfile ?? {};
+  const maxTextureSize = Math.max(128, Number(options.maxTextureSize ?? profile.maxTextureSize ?? 4096) || 4096);
   return new Promise((resolve, reject) => {
     editor.exporter.parse(
       root,
@@ -18,7 +20,9 @@ export async function exportCleanGlbBuffer(editor) {
         binary: true,
         onlyVisible: false,
         trs: false,
-        maxTextureSize: 4096,
+        maxTextureSize,
+        ...options,
+        binary: true,
       },
     );
   });
@@ -41,16 +45,17 @@ export function installCleanExport(editor) {
 
   const api = {
     createRoot: () => createCleanExportRoot(editor),
-    exportBuffer: () => exportCleanGlbBuffer(editor),
+    exportBuffer: (options = {}) => exportCleanGlbBuffer(editor, options),
   };
 
   editor.exportCleanBuffer = api.exportBuffer;
-  editor.exportGlb = async (filename = 'model.glb') => {
+  editor.exportGlb = async (filename = 'model.glb', options = {}) => {
     if (editor.modelRoot.children.length === 0) throw new Error('Сцена пуста');
-    editor.events.onStatus('Экспорт чистого GLB…');
-    const data = await api.exportBuffer();
+    const profileName = editor.exportProfile?.label ?? 'Generic glTF';
+    editor.events.onStatus(`Экспорт GLB · ${profileName}…`);
+    const data = await api.exportBuffer(options);
     downloadBuffer(data, filename);
-    editor.events.onStatus(`${filename} экспортирован`);
+    editor.events.onStatus(`${filename} экспортирован · ${profileName}`);
     return data;
   };
 
