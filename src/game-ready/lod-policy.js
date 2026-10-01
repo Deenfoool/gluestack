@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCleanExportRoot } from '../runtime/export-clean.js';
+import { sanitizeRootUserData } from '../runtime/metadata-policy.js';
 import { refreshIcons } from '../ui.js';
 
 function triangleCount(mesh) {
@@ -31,13 +32,8 @@ function chainFor(mesh) {
     .sort((a, b) => lodLevel(a) - lodLevel(b));
 }
 
-function cleanRuntimeUserData(userData = {}) {
-  return Object.fromEntries(Object.entries(userData).filter(([key]) => !key.startsWith('gluestack') && !key.startsWith('__gluestack')));
-}
-
 function cleanObjectData(root) {
-  root.traverse((object) => { object.userData = cleanRuntimeUserData(object.userData ?? {}); });
-  return root;
+  return sanitizeRootUserData(root, 'runtime');
 }
 
 function safeFileName(value) {
@@ -73,26 +69,82 @@ function boundsSanity(source, lod) {
   lod.geometry.computeBoundingBox();
   const a = source.geometry.boundingBox?.getSize(new THREE.Vector3()) ?? new THREE.Vector3();
   const b = lod.geometry.boundingBox?.getSize(new THREE.Vector3()) ?? new THREE.Vector3();
-  const axes = ['x', 'y', 'z'];
   let maxRelative = 0;
-  for (const axis of axes) {
+  for (const axis of ['x', 'y', 'z']) {
     const base = Math.max(1e-5, Math.abs(a[axis]));
     maxRelative = Math.max(maxRelative, Math.abs(b[axis] - a[axis]) / base);
   }
   return maxRelative;
 }
 
+function hardEdgeCount(geometry) {
+  const position = geometry?.getAttribute('position');
+  const normal = geometry?.getAttribute('normal');
+  if (!position || !normal || normal.count !== position.count) return 0;
+  const buckets = new Map();
+  const q = (value) => Math.round(value * 100000);
+  for (let i = 0; i < position.count; i += 1) {
+    const key = `${q(position.getX(i))},${q(position.getY(i))},${q(position.getZ(i))}`;
+    const normalKey = `${q(normal.getX(i))},${q(normal.getY(i))},${q(normal.getZ(i))}`;
+    if (!buckets.has(key)) buckets.set(key, new Set());
+    buckets.get(key).add(normalKey);
+  }
+  let count = 0;
+  for (const normals of buckets.values()) if (normals.size > 1) count += 1;
+  return count;
+}
+
+function uvMetrics(geometry) {
+  const uv = geometry?.getAttribute('uv');
+  const position = geometry?.getAttribute('position');
+  if (!uv || !position || uv.count !== position.count) return { present: false, invalid: 0, degenerate: 0 };
+  let invalid = 0;
+  for (let i = 0; i < uv.count; i += 1) {
+    if (![uv.getX(i), uv.getY(i)].every(Number.isFinite)) invalid += 1;
+  }
+  const index = geometry.index;
+  const corner = (i) => index ? index.getX(i) : i;
+  const total = index?.count ?? position.count;
+  let degenerate = 0;
+  for (let i = 0; i + 2 < total; i += 3) {
+    const a = corner(i); const b = corner(i + 1); const c = corner(i + 2);
+    const area = (uv.getX(b) - uv.getX(a)) * (uv.getY(c) - uv.getY(a))
+      - (uv.getY(b) - uv.getY(a)) * (uv.getX(c) - uv.getX(a));
+    if (!Number.isFinite(area) || Math.abs(area) < 1e-10) degenerate += 1;
+  }
+  return { present: true, invalid, degenerate };
+}
+
 function chainSanity(source, chain) {
   const warnings = [];
-  const sourceUV = Boolean(source.geometry.getAttribute('uv'));
+  const metrics = [];
+  const sourceTriangles = triangleCount(source);
+  const sourceUV = uvMetrics(source.geometry);
+  const sourceHardEdges = hardEdgeCount(source.geometry);
   for (const lod of chain.slice(1)) {
-    if (triangleCount(lod) >= triangleCount(source)) warnings.push(`${lod.name}: triangle count не уменьшился`);
-    if (sourceUV && !lod.geometry.getAttribute('uv')) warnings.push(`${lod.name}: потерян UV0`);
-    if (!lod.geometry.getAttribute('normal')) warnings.push(`${lod.name}: отсутствуют normals`);
+    const triangles = triangleCount(lod);
     const boundsError = boundsSanity(source, lod);
+    const uv = uvMetrics(lod.geometry);
+    const hardEdges = hardEdgeCount(lod.geometry);
+    if (triangles >= sourceTriangles) warnings.push(`${lod.name}: triangle count не уменьшился`);
+    if (sourceUV.present && !uv.present) warnings.push(`${lod.name}: потерян UV0`);
+    if (uv.invalid) warnings.push(`${lod.name}: ${uv.invalid} invalid UV coordinate(s)`);
+    if (sourceUV.present && uv.degenerate > Math.max(2, sourceUV.degenerate * 2)) warnings.push(`${lod.name}: UV degenerate triangles ${uv.degenerate}`);
+    if (!lod.geometry.getAttribute('normal')) warnings.push(`${lod.name}: отсутствуют normals`);
     if (boundsError > 0.1) warnings.push(`${lod.name}: bounds отличаются на ${(boundsError * 100).toFixed(1)}%`);
+    if (sourceHardEdges > 0 && hardEdges === 0) warnings.push(`${lod.name}: hard-edge signature потеряна`);
+    metrics.push({
+      name: lod.name,
+      triangles,
+      ratio: sourceTriangles ? triangles / sourceTriangles : 1,
+      boundsError,
+      uvInvalid: uv.invalid,
+      uvDegenerate: uv.degenerate,
+      hardEdges,
+      sourceHardEdges,
+    });
   }
-  return warnings;
+  return { warnings, metrics };
 }
 
 export function installLODPolicy({ editor, gameReady }) {
@@ -106,6 +158,7 @@ export function installLODPolicy({ editor, gameReady }) {
     replaceExisting: false,
     coverage: [0.5, 0.2],
     distances: [20, 50],
+    normalPolicy: 'preserve',
   };
 
   const originalGenerate = controller.generateLOD.bind(controller);
@@ -118,7 +171,7 @@ export function installLODPolicy({ editor, gameReady }) {
     const group = baseNameOf(source);
     chain.forEach((mesh, index) => {
       const level = lodLevel(mesh) ?? index;
-      const ratio = level === 0 ? 1 : policy.ratios[level - 1] ?? mesh.userData?.gluestackLOD?.ratio ?? 1;
+      const ratio = level === 0 ? 1 : mesh.userData?.gluestackLOD?.ratio ?? policy.ratios[level - 1] ?? 1;
       mesh.userData.lod = {
         version: 1,
         group,
@@ -128,6 +181,25 @@ export function installLODPolicy({ editor, gameReady }) {
         distanceHint: level === 0 ? 0 : policy.distances[level - 1] ?? null,
       };
     });
+  }
+
+  function pruneBelowFloor(source) {
+    const removed = [];
+    for (const lod of chainFor(source).slice(1)) {
+      if (triangleCount(lod) >= policy.triangleFloor) continue;
+      removed.push(lod.name);
+      lod.parent?.remove(lod);
+      editor.disposeObjectResources(lod);
+    }
+    return removed;
+  }
+
+  function applyNormalPolicy(source) {
+    if (policy.normalPolicy !== 'recalculate') return;
+    for (const lod of chainFor(source).slice(1)) {
+      lod.geometry.computeVertexNormals();
+      lod.geometry.normalizeNormals();
+    }
   }
 
   function generate(ratios = policy.ratios) {
@@ -163,20 +235,25 @@ export function installLODPolicy({ editor, gameReady }) {
 
     const ok = originalGenerate(clean);
     if (!ok) return false;
+    const removed = pruneBelowFloor(source);
+    applyNormalPolicy(source);
     const chain = chainFor(source);
     applyRuntimeMetadata(source, chain);
-    const warnings = chainSanity(source, chain);
+    const sanity = chainSanity(source, chain);
     source.userData.gluestackLODPolicy = {
       ratios: [...clean],
       triangleFloor: policy.triangleFloor,
       replaceExisting: policy.replaceExisting,
       coverage: [...policy.coverage],
       distances: [...policy.distances],
-      warnings,
+      normalPolicy: policy.normalPolicy,
+      warnings: sanity.warnings,
+      metrics: sanity.metrics,
+      removedBelowFloor: removed,
     };
     editor.events.onStructure();
-    controller.status(warnings.length
-      ? `LOD создан · ${warnings.length} sanity warning(s)`
+    controller.status(sanity.warnings.length
+      ? `LOD создан · ${sanity.warnings.length} sanity warning(s)`
       : `LOD policy · ${chain.length} level(s) · sanity OK`);
     renderState();
     return true;
@@ -192,6 +269,7 @@ export function installLODPolicy({ editor, gameReady }) {
       <label><span>LOD1 ratio</span><input data-lod-policy="ratio1" type="number" min="0.05" max="0.95" step="0.05" value="0.5"></label>
       <label><span>LOD2 ratio</span><input data-lod-policy="ratio2" type="number" min="0.05" max="0.95" step="0.05" value="0.25"></label>
       <label><span>Triangle floor</span><input data-lod-policy="floor" type="number" min="4" step="1" value="24"></label>
+      <label><span>Normals</span><select data-lod-policy="normals"><option value="preserve" selected>Preserve</option><option value="recalculate">Recalculate</option></select></label>
       <label><span>LOD1 coverage</span><input data-lod-policy="coverage1" type="number" min="0" max="1" step="0.05" value="0.5"></label>
       <label><span>LOD2 coverage</span><input data-lod-policy="coverage2" type="number" min="0" max="1" step="0.05" value="0.2"></label>
       <label><span>LOD1 distance</span><input data-lod-policy="distance1" type="number" min="0" step="1" value="20"></label>
@@ -212,7 +290,7 @@ export function installLODPolicy({ editor, gameReady }) {
 
   const style = document.createElement('style');
   style.textContent = `
-    .lod-policy-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}.lod-policy-grid label{display:grid;grid-template-columns:minmax(0,1fr) 76px;align-items:center;gap:5px;font-size:10px;color:#aaa}.lod-policy-grid input{min-width:0;height:24px;background:#1f1f1f;color:#ddd;border:1px solid #484848;border-radius:3px;padding:2px 4px}.lod-policy-grid .lod-policy-check{grid-column:1/-1;display:flex}.lod-policy-actions{display:grid;grid-template-columns:1.4fr 1fr;gap:4px;margin-top:6px}.lod-policy-actions.three{grid-template-columns:repeat(3,1fr)}.lod-policy-actions button{min-height:27px;background:#343434;color:#ddd;border:1px solid #4a4a4a;border-radius:3px;font-size:10px}.lod-policy-actions button:hover{background:#484848}`;
+    .lod-policy-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}.lod-policy-grid label{display:grid;grid-template-columns:minmax(0,1fr) 76px;align-items:center;gap:5px;font-size:10px;color:#aaa}.lod-policy-grid input,.lod-policy-grid select{min-width:0;height:24px;background:#1f1f1f;color:#ddd;border:1px solid #484848;border-radius:3px;padding:2px 4px}.lod-policy-grid .lod-policy-check{grid-column:1/-1;display:flex}.lod-policy-actions{display:grid;grid-template-columns:1.4fr 1fr;gap:4px;margin-top:6px}.lod-policy-actions.three{grid-template-columns:repeat(3,1fr)}.lod-policy-actions button{min-height:27px;background:#343434;color:#ddd;border:1px solid #4a4a4a;border-radius:3px;font-size:10px}.lod-policy-actions button:hover{background:#484848}`;
   document.head.appendChild(style);
 
   function readPolicy() {
@@ -230,6 +308,7 @@ export function installLODPolicy({ editor, gameReady }) {
       Math.max(0, Number(card.querySelector('[data-lod-policy="distance2"]').value) || 50),
     ];
     policy.replaceExisting = card.querySelector('[data-lod-policy="replace"]').checked;
+    policy.normalPolicy = card.querySelector('[data-lod-policy="normals"]').value === 'recalculate' ? 'recalculate' : 'preserve';
   }
 
   function renderState() {
@@ -241,8 +320,11 @@ export function installLODPolicy({ editor, gameReady }) {
     }
     const chain = chainFor(source);
     const skip = Boolean(source.userData?.gluestackLODSkip);
-    const warnings = source.userData?.gluestackLODPolicy?.warnings ?? [];
-    output.textContent = `${skip ? 'SKIP · ' : ''}${chain.length > 1 ? `${chain.length} LOD levels` : 'No generated chain'}${warnings.length ? ` · ${warnings.length} warning(s)` : ''}`;
+    const state = source.userData?.gluestackLODPolicy ?? {};
+    const warnings = state.warnings ?? [];
+    const metrics = state.metrics ?? [];
+    const metricText = metrics.length ? ` · bounds max ${Math.max(...metrics.map((item) => item.boundsError ?? 0)) * 100 | 0}%` : '';
+    output.textContent = `${skip ? 'SKIP · ' : ''}${chain.length > 1 ? `${chain.length} LOD levels` : 'No generated chain'}${warnings.length ? ` · ${warnings.length} warning(s)` : ''}${metricText}`;
   }
 
   async function exportAll() {
@@ -303,7 +385,16 @@ export function installLODPolicy({ editor, gameReady }) {
     renderState();
   };
 
-  const api = { policy, generate, chainFor: () => chainFor(editor.selected), exportAll, exportLOD0Only, exportIndividual, render: renderState };
+  const api = {
+    policy,
+    generate,
+    chainFor: () => chainFor(editor.selected),
+    sanity: () => editor.selected?.isMesh ? chainSanity(editor.selected, chainFor(editor.selected)) : { warnings: ['Select Mesh'], metrics: [] },
+    exportAll,
+    exportLOD0Only,
+    exportIndividual,
+    render: renderState,
+  };
   controller.__lodPolicy = api;
   renderState();
   refreshIcons();
