@@ -14,6 +14,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
   const animations = await loadAndInstall(editor, 'Animations', () => import('./runtime/animations.js'), ({ installAnimations }) => installAnimations(editor));
   const metadataPolicy = await loadAndInstall(editor, 'Metadata policy', () => import('./runtime/metadata-policy.js'), ({ installMetadataPolicy }) => installMetadataPolicy(editor));
   const cleanExport = await loadAndInstall(editor, 'Clean GLB export', () => import('./runtime/export-clean.js'), ({ installCleanExport }) => installCleanExport(editor));
+  const exportSelected = await loadAndInstall(editor, 'Export Selected', () => import('./runtime/export-selected.js'), ({ installExportSelected }) => installExportSelected({ editor }));
   const animationEditor = await loadAndInstall(editor, 'Animation editor', () => import('./runtime/animation-editor.js'), ({ installAnimationEditor }) => installAnimationEditor(editor));
   const dopeSheet = await loadAndInstall(editor, 'Dope Sheet', () => import('./runtime/dope-sheet.js'), ({ installDopeSheet }) => installDopeSheet(editor));
   const importer = await loadAndInstall(editor, 'GLTF importer', () => import('./runtime/importer.js'), ({ installImportPipeline }) => installImportPipeline({ editor, editMode, knifeTool }));
@@ -69,7 +70,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     uv, advancedUV, smartIslands, harmonicUnwrap, uvRelax, uvIslandTools,
     materials, projects, gameReady, gameReadyValidator, lodPolicy, optimizerV2, exportProfiles, cleanupAudit,
     paint, procedural, scene, hardening, resources, importer, integrity,
-    viewportHistory, animations, animationEditor, dopeSheet, modifierStack, metadataPolicy, cleanExport,
+    viewportHistory, animations, animationEditor, dopeSheet, modifierStack, metadataPolicy, cleanExport, exportSelected,
   };
 
   const diagnostics = await loadAndInstall(editor, 'Diagnostics', () => import('./runtime/diagnostics.js'), ({ installDiagnostics }) => installDiagnostics({ editor, projects, features: installed }));
