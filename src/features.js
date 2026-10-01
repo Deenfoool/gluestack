@@ -10,191 +10,48 @@ async function loadAndInstall(editor, name, loader, installer) {
 }
 
 export async function installFeatures({ editor, editMode, knifeTool, requestNumber }) {
-  const resources = await loadAndInstall(
-    editor,
-    'Resource ownership',
-    () => import('./runtime/resource-ownership.js'),
-    ({ installResourceOwnership }) => installResourceOwnership(editor),
-  );
-
-  const animations = await loadAndInstall(
-    editor,
-    'Animations',
-    () => import('./runtime/animations.js'),
-    ({ installAnimations }) => installAnimations(editor),
-  );
-
-  const cleanExport = await loadAndInstall(
-    editor,
-    'Clean GLB export',
-    () => import('./runtime/export-clean.js'),
-    ({ installCleanExport }) => installCleanExport(editor),
-  );
-
-  const animationEditor = await loadAndInstall(
-    editor,
-    'Animation editor',
-    () => import('./runtime/animation-editor.js'),
-    ({ installAnimationEditor }) => installAnimationEditor(editor),
-  );
-
-  const dopeSheet = await loadAndInstall(
-    editor,
-    'Dope Sheet',
-    () => import('./runtime/dope-sheet.js'),
-    ({ installDopeSheet }) => installDopeSheet(editor),
-  );
-
-  const importer = await loadAndInstall(
-    editor,
-    'GLTF importer',
-    () => import('./runtime/importer.js'),
-    ({ installImportPipeline }) => installImportPipeline({ editor, editMode, knifeTool }),
-  );
+  const resources = await loadAndInstall(editor, 'Resource ownership', () => import('./runtime/resource-ownership.js'), ({ installResourceOwnership }) => installResourceOwnership(editor));
+  const animations = await loadAndInstall(editor, 'Animations', () => import('./runtime/animations.js'), ({ installAnimations }) => installAnimations(editor));
+  const cleanExport = await loadAndInstall(editor, 'Clean GLB export', () => import('./runtime/export-clean.js'), ({ installCleanExport }) => installCleanExport(editor));
+  const animationEditor = await loadAndInstall(editor, 'Animation editor', () => import('./runtime/animation-editor.js'), ({ installAnimationEditor }) => installAnimationEditor(editor));
+  const dopeSheet = await loadAndInstall(editor, 'Dope Sheet', () => import('./runtime/dope-sheet.js'), ({ installDopeSheet }) => installDopeSheet(editor));
+  const importer = await loadAndInstall(editor, 'GLTF importer', () => import('./runtime/importer.js'), ({ installImportPipeline }) => installImportPipeline({ editor, editMode, knifeTool }));
 
   let modifierStack = editor.modifierStack ?? null;
   if (!modifierStack && editor.modifierStackReady) {
-    try {
-      modifierStack = await editor.modifierStackReady;
-    } catch (error) {
+    try { modifierStack = await editor.modifierStackReady; }
+    catch (error) {
       console.error('[gluestack] Modifier Stack bootstrap failed', error);
       editor.events.onStatus(`Modifier Stack: модуль не загрузился — ${error.message || error}`);
     }
   }
 
-  const uv = await loadAndInstall(
-    editor,
-    'UV Editing',
-    () => import('./uv/integration.js'),
-    ({ installUVWorkspace }) => installUVWorkspace({ editor, editMode, knifeTool, requestNumber }),
-  );
+  const uv = await loadAndInstall(editor, 'UV Editing', () => import('./uv/integration.js'), ({ installUVWorkspace }) => installUVWorkspace({ editor, editMode, knifeTool, requestNumber }));
+  const uvWorkspace = () => document.querySelector('#uv-workspace');
+  const advancedUV = await loadAndInstall(editor, 'Advanced UV', () => import('./uv/advanced.js'), ({ installAdvancedUV }) => installAdvancedUV({ controller: uv?.controller, workspace: uvWorkspace(), editor }));
+  const smartIslands = await loadAndInstall(editor, 'Smart UV islands', () => import('./uv/smart-islands.js'), ({ installSmartIslands }) => installSmartIslands({ controller: uv?.controller, workspace: uvWorkspace() }));
+  const harmonicUnwrap = await loadAndInstall(editor, 'Harmonic UV unwrap', () => import('./uv/unwrap-solver.js'), ({ installHarmonicUnwrap }) => installHarmonicUnwrap({ controller: uv?.controller, workspace: uvWorkspace() }));
+  const uvRelax = await loadAndInstall(editor, 'UV Relax', () => import('./uv/relax.js'), ({ installUVRelax }) => installUVRelax({ controller: uv?.controller, workspace: uvWorkspace() }));
+  const uvIslandTools = await loadAndInstall(editor, 'UV island tools', () => import('./uv/island-tools.js'), ({ installUVIslandTools }) => installUVIslandTools({ controller: uv?.controller, workspace: uvWorkspace() }));
 
-  const advancedUV = await loadAndInstall(
-    editor,
-    'Advanced UV',
-    () => import('./uv/advanced.js'),
-    ({ installAdvancedUV }) => installAdvancedUV({
-      controller: uv?.controller,
-      workspace: document.querySelector('#uv-workspace'),
-      editor,
-    }),
-  );
-
-  const smartIslands = await loadAndInstall(
-    editor,
-    'Smart UV islands',
-    () => import('./uv/smart-islands.js'),
-    ({ installSmartIslands }) => installSmartIslands({
-      controller: uv?.controller,
-      workspace: document.querySelector('#uv-workspace'),
-    }),
-  );
-
-  const harmonicUnwrap = await loadAndInstall(
-    editor,
-    'Harmonic UV unwrap',
-    () => import('./uv/unwrap-solver.js'),
-    ({ installHarmonicUnwrap }) => installHarmonicUnwrap({
-      controller: uv?.controller,
-      workspace: document.querySelector('#uv-workspace'),
-    }),
-  );
-
-  const uvRelax = await loadAndInstall(
-    editor,
-    'UV Relax',
-    () => import('./uv/relax.js'),
-    ({ installUVRelax }) => installUVRelax({
-      controller: uv?.controller,
-      workspace: document.querySelector('#uv-workspace'),
-    }),
-  );
-
-  const uvIslandTools = await loadAndInstall(
-    editor,
-    'UV island tools',
-    () => import('./uv/island-tools.js'),
-    ({ installUVIslandTools }) => installUVIslandTools({
-      controller: uv?.controller,
-      workspace: document.querySelector('#uv-workspace'),
-    }),
-  );
-
-  const materials = await loadAndInstall(
-    editor,
-    'Materials',
-    () => import('./materials/integration.js'),
-    ({ installMaterialPanel }) => installMaterialPanel({ editor }),
-  );
-
-  const projects = await loadAndInstall(
-    editor,
-    'Projects',
-    () => import('./projects/integration.js'),
-    ({ installProjects }) => installProjects({ editor, editMode, knifeTool }),
-  );
-
-  const gameReady = await loadAndInstall(
-    editor,
-    'Game Ready',
-    () => import('./game-ready/integration.js'),
-    ({ installGameReady }) => installGameReady({ editor }),
-  );
-
-  const gameReadyValidator = await loadAndInstall(
-    editor,
-    'Game Ready validator v2',
-    () => import('./game-ready/validator-v2.js'),
-    ({ installGameReadyValidatorV2 }) => installGameReadyValidatorV2({ editor, gameReady }),
-  );
-
-  const lodPolicy = await loadAndInstall(
-    editor,
-    'LOD policy',
-    () => import('./game-ready/lod-policy.js'),
-    ({ installLODPolicy }) => installLODPolicy({ editor, gameReady }),
-  );
-
-  const integrity = await loadAndInstall(
-    editor,
-    'Data integrity',
-    () => import('./runtime/data-integrity.js'),
-    ({ installDataIntegrity }) => installDataIntegrity({ editor, editMode, gameReady }),
-  );
-
-  const paint = await loadAndInstall(
-    editor,
-    'Texture Paint',
-    () => import('./paint/integration.js'),
-    ({ installTexturePaint }) => installTexturePaint({ editor, editMode, knifeTool, materials }),
-  );
-
-  const procedural = await loadAndInstall(
-    editor,
-    'Procedural',
-    () => import('./procedural/integration.js'),
-    ({ installProceduralGenerators }) => installProceduralGenerators({ editor }),
-  );
-
-  const scene = await loadAndInstall(
-    editor,
-    'Scene controls',
-    () => import('./scene/integration.js'),
-    ({ installSceneControls }) => installSceneControls({ editor }),
-  );
-
-  const viewportHistory = await loadAndInstall(
-    editor,
-    'Viewport history',
-    () => import('./runtime/viewport-history.js'),
-    ({ installViewportHistory }) => installViewportHistory(editor),
-  );
+  const materials = await loadAndInstall(editor, 'Materials', () => import('./materials/integration.js'), ({ installMaterialPanel }) => installMaterialPanel({ editor }));
+  const projects = await loadAndInstall(editor, 'Projects', () => import('./projects/integration.js'), ({ installProjects }) => installProjects({ editor, editMode, knifeTool }));
+  const gameReady = await loadAndInstall(editor, 'Game Ready', () => import('./game-ready/integration.js'), ({ installGameReady }) => installGameReady({ editor }));
+  const gameReadyValidator = await loadAndInstall(editor, 'Game Ready validator v2', () => import('./game-ready/validator-v2.js'), ({ installGameReadyValidatorV2 }) => installGameReadyValidatorV2({ editor, gameReady }));
+  const lodPolicy = await loadAndInstall(editor, 'LOD policy', () => import('./game-ready/lod-policy.js'), ({ installLODPolicy }) => installLODPolicy({ editor, gameReady }));
+  const optimizerV2 = await loadAndInstall(editor, 'Game Ready optimizer v2', () => import('./game-ready/optimizer-v2.js'), ({ installGameReadyOptimizerV2 }) => installGameReadyOptimizerV2({ editor, gameReady }));
+  const integrity = await loadAndInstall(editor, 'Data integrity', () => import('./runtime/data-integrity.js'), ({ installDataIntegrity }) => installDataIntegrity({ editor, editMode, gameReady }));
+  const paint = await loadAndInstall(editor, 'Texture Paint', () => import('./paint/integration.js'), ({ installTexturePaint }) => installTexturePaint({ editor, editMode, knifeTool, materials }));
+  const procedural = await loadAndInstall(editor, 'Procedural', () => import('./procedural/integration.js'), ({ installProceduralGenerators }) => installProceduralGenerators({ editor }));
+  const scene = await loadAndInstall(editor, 'Scene controls', () => import('./scene/integration.js'), ({ installSceneControls }) => installSceneControls({ editor }));
+  const viewportHistory = await loadAndInstall(editor, 'Viewport history', () => import('./runtime/viewport-history.js'), ({ installViewportHistory }) => installViewportHistory(editor));
 
   const previousSelectionHandler = editor.events.onSelection;
   editor.events.onSelection = (...args) => {
     previousSelectionHandler(...args);
     if (materials && !materials.panel.hidden) materials.refresh();
     modifierStack?.render?.();
+    lodPolicy?.render?.();
   };
 
   document.querySelector('.workspace-tabs')?.addEventListener('click', (event) => {
@@ -203,53 +60,17 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     document.querySelectorAll('.workspace-tab').forEach((item) => item.classList.toggle('active', item === tab));
   });
 
-  const hardening = await loadAndInstall(
-    editor,
-    'Runtime hardening',
-    () => import('./runtime/hardening.js'),
-    ({ installRuntimeHardening }) => installRuntimeHardening({ editor, projects, editMode }),
-  );
+  const hardening = await loadAndInstall(editor, 'Runtime hardening', () => import('./runtime/hardening.js'), ({ installRuntimeHardening }) => installRuntimeHardening({ editor, projects, editMode }));
 
   const installed = {
-    uv,
-    advancedUV,
-    smartIslands,
-    harmonicUnwrap,
-    uvRelax,
-    uvIslandTools,
-    materials,
-    projects,
-    gameReady,
-    gameReadyValidator,
-    lodPolicy,
-    paint,
-    procedural,
-    scene,
-    hardening,
-    resources,
-    importer,
-    integrity,
-    viewportHistory,
-    animations,
-    animationEditor,
-    dopeSheet,
-    modifierStack,
-    cleanExport,
+    uv, advancedUV, smartIslands, harmonicUnwrap, uvRelax, uvIslandTools,
+    materials, projects, gameReady, gameReadyValidator, lodPolicy, optimizerV2,
+    paint, procedural, scene, hardening, resources, importer, integrity,
+    viewportHistory, animations, animationEditor, dopeSheet, modifierStack, cleanExport,
   };
 
-  const diagnostics = await loadAndInstall(
-    editor,
-    'Diagnostics',
-    () => import('./runtime/diagnostics.js'),
-    ({ installDiagnostics }) => installDiagnostics({ editor, projects, features: installed }),
-  );
-
-  const goldenDiagnostics = await loadAndInstall(
-    editor,
-    'Golden fixtures',
-    () => import('./runtime/golden-diagnostics.js'),
-    ({ installGoldenDiagnostics }) => installGoldenDiagnostics({ editor, diagnostics, importer }),
-  );
+  const diagnostics = await loadAndInstall(editor, 'Diagnostics', () => import('./runtime/diagnostics.js'), ({ installDiagnostics }) => installDiagnostics({ editor, projects, features: installed }));
+  const goldenDiagnostics = await loadAndInstall(editor, 'Golden fixtures', () => import('./runtime/golden-diagnostics.js'), ({ installGoldenDiagnostics }) => installGoldenDiagnostics({ editor, diagnostics, importer }));
 
   const result = { ...installed, diagnostics, goldenDiagnostics };
   const failed = Object.entries(result).filter(([, value]) => !value).map(([name]) => name);
