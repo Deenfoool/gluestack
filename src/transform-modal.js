@@ -11,7 +11,9 @@ export class TransformModal {
   }
 
   begin(mode) {
-    if (this.state) this.cancel(true);
+    // Switching G/R/S should keep a valid visible preview instead of silently reverting it.
+    // Invalid/incomplete input is still cancelled by commit().
+    if (this.state) this.commit();
     if (this.editMode.active) {
       const snapshot = this.editMode.captureSelectedPositions();
       if (!snapshot.length) {
