@@ -77,26 +77,26 @@ export function applyBoolean(modifiers, operation = 'difference') {
   const active = modifiers.editor.selected;
   const selected = modifiers.editor.getSelectedObjects().filter(isRegularMesh);
   if (!isRegularMesh(active) || selected.length !== 2 || !selected.includes(active)) {
-    modifiers.onStatus('Boolean: выделите ровно 2 обычных non-instanced Mesh; активный объект — A, второй — B');
+    modifiers.onStatus('Boolean destructive v1: выделите ровно 2 обычных non-instanced Mesh; активный объект — A, второй — B');
     return false;
   }
   const operand = selected.find((mesh) => mesh !== active);
   if (!OPERATIONS[operation]) return false;
   if (Array.isArray(active.material) || Array.isArray(operand.material)) {
-    modifiers.onStatus('Boolean: multi-material Mesh пока не поддерживается');
+    modifiers.onStatus('Boolean destructive v1: multi-material Mesh пока не поддерживается');
     return false;
   }
   if (hasMorphData(active) || hasMorphData(operand)) {
-    modifiers.onStatus('Boolean: morph targets не поддерживаются без потери данных');
+    modifiers.onStatus('Boolean destructive v1: morph targets не поддерживаются без потери данных');
     return false;
   }
   const unsupported = [...new Set([...unsupportedAttributes(active), ...unsupportedAttributes(operand)])];
   if (unsupported.length) {
-    modifiers.onStatus(`Boolean отменён: будут потеряны атрибуты ${unsupported.join(', ')}`);
+    modifiers.onStatus(`Boolean destructive v1 отменён: будут потеряны атрибуты ${unsupported.join(', ')}`);
     return false;
   }
   if (!isWatertight(active) || !isWatertight(operand)) {
-    modifiers.onStatus('Boolean: оба Mesh должны быть watertight / two-manifold');
+    modifiers.onStatus('Boolean destructive v1: оба Mesh должны быть watertight / two-manifold');
     return false;
   }
 
@@ -116,7 +116,7 @@ export function applyBoolean(modifiers, operation = 'difference') {
     evaluator.useGroups = false;
     result = evaluator.evaluate(brushA, brushB, OPERATIONS[operation]);
     if (!result?.geometry?.getAttribute('position')?.count) {
-      modifiers.onStatus('Boolean: результат пуст');
+      modifiers.onStatus('Boolean destructive v1: результат пуст');
       result?.geometry?.dispose?.();
       geometryA.dispose();
       geometryB.dispose();
@@ -137,7 +137,7 @@ export function applyBoolean(modifiers, operation = 'difference') {
     modifiers.editor.select(active);
     modifiers.editor.events.onStructure();
     modifiers.editor.events.onTransform(active);
-    modifiers.onStatus(`Boolean ${operation} применён · cutter сохранён`);
+    modifiers.onStatus(`Boolean ${operation} применён destructive · cutter сохранён · Undo доступен`);
 
     result.geometry.dispose();
     geometryA.dispose();
@@ -148,7 +148,7 @@ export function applyBoolean(modifiers, operation = 'difference') {
     result?.geometry?.dispose?.();
     geometryA?.dispose?.();
     geometryB?.dispose?.();
-    modifiers.onStatus(`Boolean не выполнен: ${error.message || error}`);
+    modifiers.onStatus(`Boolean destructive v1 не выполнен: ${error.message || error}`);
     return false;
   }
 }
