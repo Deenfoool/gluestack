@@ -148,6 +148,13 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     ({ installGameReadyValidatorV2 }) => installGameReadyValidatorV2({ editor, gameReady }),
   );
 
+  const lodPolicy = await loadAndInstall(
+    editor,
+    'LOD policy',
+    () => import('./game-ready/lod-policy.js'),
+    ({ installLODPolicy }) => installLODPolicy({ editor, gameReady }),
+  );
+
   const integrity = await loadAndInstall(
     editor,
     'Data integrity',
@@ -214,6 +221,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     projects,
     gameReady,
     gameReadyValidator,
+    lodPolicy,
     paint,
     procedural,
     scene,
