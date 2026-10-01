@@ -41,6 +41,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
   const gameReadyValidator = await loadAndInstall(editor, 'Game Ready validator v2', () => import('./game-ready/validator-v2.js'), ({ installGameReadyValidatorV2 }) => installGameReadyValidatorV2({ editor, gameReady }));
   const lodPolicy = await loadAndInstall(editor, 'LOD policy', () => import('./game-ready/lod-policy.js'), ({ installLODPolicy }) => installLODPolicy({ editor, gameReady }));
   const optimizerV2 = await loadAndInstall(editor, 'Game Ready optimizer v2', () => import('./game-ready/optimizer-v2.js'), ({ installGameReadyOptimizerV2 }) => installGameReadyOptimizerV2({ editor, gameReady }));
+  const exportProfiles = await loadAndInstall(editor, 'Export profiles', () => import('./game-ready/export-profiles.js'), ({ installExportProfiles }) => installExportProfiles({ editor, gameReady, optimizerV2 }));
   const cleanupAudit = await loadAndInstall(editor, 'Cleanup Preview', () => import('./game-ready/cleanup-audit.js'), ({ installCleanupAudit }) => installCleanupAudit({ editor, gameReady }));
   const integrity = await loadAndInstall(editor, 'Data integrity', () => import('./runtime/data-integrity.js'), ({ installDataIntegrity }) => installDataIntegrity({ editor, editMode, gameReady }));
   const paint = await loadAndInstall(editor, 'Texture Paint', () => import('./paint/integration.js'), ({ installTexturePaint }) => installTexturePaint({ editor, editMode, knifeTool, materials }));
@@ -66,7 +67,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
 
   const installed = {
     uv, advancedUV, smartIslands, harmonicUnwrap, uvRelax, uvIslandTools,
-    materials, projects, gameReady, gameReadyValidator, lodPolicy, optimizerV2, cleanupAudit,
+    materials, projects, gameReady, gameReadyValidator, lodPolicy, optimizerV2, exportProfiles, cleanupAudit,
     paint, procedural, scene, hardening, resources, importer, integrity,
     viewportHistory, animations, animationEditor, dopeSheet, modifierStack, metadataPolicy, cleanExport,
   };
