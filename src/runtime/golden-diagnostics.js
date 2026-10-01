@@ -51,7 +51,32 @@ async function externalSidecarFixture(importer) {
   }
 }
 
-export function installGoldenDiagnostics({ editor, diagnostics, importer }) {
+async function projectV1Fixture(projects) {
+  if (!projects?.decodeProject || !projects?.prepareGlbBuffer) {
+    return { name: '.gluestack v1 → v2 migration', ok: false, detail: 'Project migration API unavailable' };
+  }
+  try {
+    const url = new URL('../../tests/fixtures/project-v1.gluestack', import.meta.url);
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const decoded = projects.decodeProject(await response.arrayBuffer());
+    const prepared = await projects.prepareGlbBuffer(decoded.glb);
+    const ok = decoded.metadata.version === 2
+      && decoded.metadata.format === 'gluestack-project'
+      && decoded.metadata.name === 'Golden v1 Project'
+      && decoded.metadata.editor?.snapEnabled === true;
+    disposeParsedScene(prepared.scene);
+    return {
+      name: '.gluestack v1 → v2 migration',
+      ok,
+      detail: ok ? 'v1 container decoded, migrated to v2 and GLB payload parsed' : `unexpected migrated metadata v${decoded.metadata.version ?? '?'}`,
+    };
+  } catch (error) {
+    return { name: '.gluestack v1 → v2 migration', ok: false, detail: error.message || String(error) };
+  }
+}
+
+export function installGoldenDiagnostics({ editor, diagnostics, importer, projects }) {
   if (!editor || !diagnostics || editor.__gluestackGoldenDiagnostics) return editor?.__gluestackGoldenDiagnostics ?? null;
   const menu = diagnostics.menu?.querySelector('.menu-popover');
   if (!menu) return null;
@@ -69,6 +94,7 @@ export function installGoldenDiagnostics({ editor, diagnostics, importer }) {
       const { runGoldenFixtures } = await import('../../tests/fixtures/golden-fixtures.js');
       const results = await runGoldenFixtures(editor);
       results.push(await externalSidecarFixture(importer));
+      results.push(await projectV1Fixture(projects));
       const failed = results.filter((item) => !item.ok);
       console.table(results.map((item) => ({ status: item.ok ? 'PASS' : 'FAIL', ...item })));
       editor.events.onStatus(failed.length ? `Golden fixtures: ${failed.length} FAIL` : `Golden fixtures: PASS · ${results.length}/${results.length}`);
