@@ -69,6 +69,17 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     ({ installUVWorkspace }) => installUVWorkspace({ editor, editMode, knifeTool, requestNumber }),
   );
 
+  const advancedUV = await loadAndInstall(
+    editor,
+    'Advanced UV',
+    () => import('./uv/advanced.js'),
+    ({ installAdvancedUV }) => installAdvancedUV({
+      controller: uv?.controller,
+      workspace: document.querySelector('#uv-workspace'),
+      editor,
+    }),
+  );
+
   const materials = await loadAndInstall(
     editor,
     'Materials',
@@ -147,6 +158,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
 
   const installed = {
     uv,
+    advancedUV,
     materials,
     projects,
     gameReady,
