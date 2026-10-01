@@ -60,10 +60,16 @@ export function installProjects({ editor, editMode, knifeTool }) {
   }
 
   function resetHistory() {
-    editor.cancelHistory();
-    editor.clearHistoryStack(editor.undoStack);
-    editor.clearHistoryStack(editor.redoStack);
-    editor.emitHistory();
+    const previousLoading = projects.isLoading;
+    projects.isLoading = true;
+    try {
+      editor.cancelHistory();
+      editor.clearHistoryStack(editor.undoStack);
+      editor.clearHistoryStack(editor.redoStack);
+      editor.emitHistory();
+    } finally {
+      projects.isLoading = previousLoading;
+    }
   }
 
   async function quickSave() {
