@@ -73,7 +73,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
 
   const diagnostics = await loadAndInstall(editor, 'Diagnostics', () => import('./runtime/diagnostics.js'), ({ installDiagnostics }) => installDiagnostics({ editor, projects, features: installed }));
   const metadataAudit = await loadAndInstall(editor, 'Metadata audit', () => import('./runtime/metadata-audit.js'), ({ installMetadataAudit }) => installMetadataAudit({ editor, projects, diagnostics }));
-  const goldenDiagnostics = await loadAndInstall(editor, 'Golden fixtures', () => import('./runtime/golden-diagnostics.js'), ({ installGoldenDiagnostics }) => installGoldenDiagnostics({ editor, diagnostics, importer }));
+  const goldenDiagnostics = await loadAndInstall(editor, 'Golden fixtures', () => import('./runtime/golden-diagnostics.js'), ({ installGoldenDiagnostics }) => installGoldenDiagnostics({ editor, diagnostics, importer, projects }));
 
   const result = { ...installed, diagnostics, metadataAudit, goldenDiagnostics };
   const failed = Object.entries(result).filter(([, value]) => !value).map(([name]) => name);
