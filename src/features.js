@@ -80,6 +80,26 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
     }),
   );
 
+  const smartIslands = await loadAndInstall(
+    editor,
+    'Smart UV islands',
+    () => import('./uv/smart-islands.js'),
+    ({ installSmartIslands }) => installSmartIslands({
+      controller: uv?.controller,
+      workspace: document.querySelector('#uv-workspace'),
+    }),
+  );
+
+  const uvRelax = await loadAndInstall(
+    editor,
+    'UV Relax',
+    () => import('./uv/relax.js'),
+    ({ installUVRelax }) => installUVRelax({
+      controller: uv?.controller,
+      workspace: document.querySelector('#uv-workspace'),
+    }),
+  );
+
   const materials = await loadAndInstall(
     editor,
     'Materials',
@@ -159,6 +179,8 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
   const installed = {
     uv,
     advancedUV,
+    smartIslands,
+    uvRelax,
     materials,
     projects,
     gameReady,
