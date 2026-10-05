@@ -10,18 +10,91 @@ export class TransformModal {
     this.state = null;
   }
 
+  historyLabel() {
+    if (!this.state) return 'Transform';
+    const { kind, mode } = this.state;
+    if (kind === 'edit') {
+      return mode === 'translate' ? 'Move components' : mode === 'rotate' ? 'Rotate components' : 'Scale components';
+    }
+    return mode === 'translate' ? 'Move' : mode === 'rotate' ? 'Rotate' : 'Scale';
+  }
+
+  hasValidPreviewInput() {
+    if (!this.state) return false;
+    const validNumber = this.state.buffer !== ''
+      && this.state.buffer !== '-'
+      && this.state.buffer !== '.'
+      && Number.isFinite(Number(this.state.buffer));
+    if (!validNumber) return false;
+    return this.state.mode === 'scale' || Boolean(this.state.axis);
+  }
+
+  rebaseObjectSnapshot() {
+    if (!this.state || this.state.kind !== 'object') return;
+    this.state.starts = this.editor.getSelectedObjects().map((object) => ({
+      object,
+      position: object.position.clone(),
+      rotation: object.rotation.clone(),
+      scale: object.scale.clone(),
+    }));
+  }
+
+  ensureHistory() {
+    if (!this.state || this.state.historyStarted) return;
+
+    // G/R/S also act as tool switches. The user may press S, drag the real gizmo,
+    // and only then type a number. In that case the numeric transform must start
+    // from the CURRENT object transform, not from the stale snapshot taken when S
+    // was first pressed.
+    if (this.state.kind === 'object') this.rebaseObjectSnapshot();
+    else this.state.snapshot = this.editMode.captureSelectedPositions();
+
+    this.editor.beginHistory(this.historyLabel());
+    this.state.historyStarted = true;
+  }
+
+  finishWithoutRevert({ silent = false } = {}) {
+    if (!this.state) return;
+    if (this.state.historyStarted) this.editor.cancelHistory();
+    const wasEdit = this.state.kind === 'edit';
+    this.state = null;
+    this.hud.hidden = true;
+    if (wasEdit) this.editMode.updatePivot();
+    if (!silent) this.status('Transform завершён');
+    this.refresh();
+  }
+
+  finishForModeSwitch() {
+    if (!this.state) return;
+    if (this.hasValidPreviewInput() && this.state.previewApplied) {
+      this.commit({ silent: true });
+      return;
+    }
+
+    // No numeric preview means there is nothing owned by TransformModal to undo.
+    // Most importantly, do NOT restore the snapshot here: the real TransformControls
+    // gizmo may have changed the object while this modal was open.
+    this.finishWithoutRevert({ silent: true });
+  }
+
   begin(mode) {
-    // Switching G/R/S should keep a valid visible preview instead of silently reverting it.
-    // Invalid/incomplete input is still cancelled by commit().
-    if (this.state) this.commit();
+    if (this.state) this.finishForModeSwitch();
+
     if (this.editMode.active) {
       const snapshot = this.editMode.captureSelectedPositions();
       if (!snapshot.length) {
         this.status('Edit Mode: сначала выберите компоненты');
         return false;
       }
-      this.state = { kind: 'edit', mode, axis: null, buffer: '', snapshot };
-      this.editor.beginHistory(mode === 'translate' ? 'Move components' : mode === 'rotate' ? 'Rotate components' : 'Scale components');
+      this.state = {
+        kind: 'edit',
+        mode,
+        axis: null,
+        buffer: '',
+        snapshot,
+        historyStarted: false,
+        previewApplied: false,
+      };
       this.editor.transform.detach();
     } else {
       if (!this.editor.selected) {
@@ -39,9 +112,13 @@ export class TransformModal {
           rotation: object.rotation.clone(),
           scale: object.scale.clone(),
         })),
+        historyStarted: false,
+        previewApplied: false,
       };
-      this.editor.beginHistory(mode === 'translate' ? 'Move' : mode === 'rotate' ? 'Rotate' : 'Scale');
     }
+
+    // Merely switching G/R/S must never create history or own a transform snapshot.
+    // History begins lazily on the first valid numeric preview.
     this.editor.setTransformMode(mode);
     this.render();
     return true;
@@ -65,9 +142,10 @@ export class TransformModal {
   }
 
   resetPreview() {
-    if (!this.state) return;
+    if (!this.state || !this.state.previewApplied) return;
     if (this.state.kind === 'edit') {
       this.editMode.restoreSelectedPositions(this.state.snapshot);
+      this.state.previewApplied = false;
       return;
     }
     for (const start of this.state.starts) {
@@ -76,30 +154,29 @@ export class TransformModal {
       start.object.scale.copy(start.scale);
       start.object.updateMatrix();
     }
+    this.state.previewApplied = false;
     this.editor.updateSelectionBoxes();
     this.editor.events.onTransform(this.editor.selected);
   }
 
   applyPreview() {
     if (!this.state) return;
-    if (!this.state.buffer || this.state.buffer === '-' || this.state.buffer === '.') {
+    if (!this.hasValidPreviewInput()) {
       this.resetPreview();
       return;
     }
+
+    this.ensureHistory();
     const value = Number(this.state.buffer);
-    if (!Number.isFinite(value)) return;
     const { mode, axis } = this.state;
-    if ((mode === 'translate' || mode === 'rotate') && !axis) {
-      this.resetPreview();
-      return;
-    }
 
     if (this.state.kind === 'edit') {
       this.editMode.applyNumericTransform(this.state.snapshot, mode, axis, value);
+      this.state.previewApplied = true;
       return;
     }
 
-    this.resetPreview();
+    if (this.state.previewApplied) this.resetPreview();
     for (const start of this.state.starts) {
       if (mode === 'translate') start.object.position[axis] = start.position[axis] + value;
       else if (mode === 'rotate') start.object.rotation[axis] = start.rotation[axis] + value * DEG2RAD;
@@ -107,32 +184,32 @@ export class TransformModal {
       else start.object.scale.copy(start.scale).multiplyScalar(value);
       start.object.updateMatrix();
     }
+    this.state.previewApplied = true;
     this.editor.updateSelectionBoxes();
     this.editor.events.onTransform(this.editor.selected);
   }
 
-  commit() {
+  commit({ silent = false } = {}) {
     if (!this.state) return;
-    const validNumber = this.state.buffer && Number.isFinite(Number(this.state.buffer));
-    const hasAxis = this.state.mode === 'scale' || Boolean(this.state.axis);
-    if (!validNumber || !hasAxis) {
-      this.cancel(true);
+    if (!this.hasValidPreviewInput() || !this.state.previewApplied) {
+      this.finishWithoutRevert({ silent });
       return;
     }
-    this.editor.commitHistory();
+
+    if (this.state.historyStarted) this.editor.commitHistory();
     const summary = this.hud.textContent;
     const wasEdit = this.state.kind === 'edit';
     this.state = null;
     this.hud.hidden = true;
     if (wasEdit) this.editMode.updatePivot();
-    this.status(`${summary} применено`);
+    if (!silent) this.status(`${summary} применено`);
     this.refresh();
   }
 
   cancel(revert = true) {
     if (!this.state) return;
-    if (revert) this.resetPreview();
-    this.editor.cancelHistory();
+    if (revert && this.state.previewApplied) this.resetPreview();
+    if (this.state.historyStarted) this.editor.cancelHistory();
     const wasEdit = this.state.kind === 'edit';
     this.state = null;
     this.hud.hidden = true;
