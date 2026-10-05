@@ -91,10 +91,13 @@ export function installEdgePicking({ editor, editMode, knifeTool = null, boxSele
       candidate.aNdc.y + (candidate.bNdc.y - candidate.aNdc.y) * candidate.t,
     );
     visibilityRaycaster.setFromCamera(midNdc, camera);
+    const previousMask = visibilityRaycaster.layers.mask;
+    visibilityRaycaster.layers.mask = mesh.layers.mask;
     const first = visibilityRaycaster.intersectObject(mesh, false).find((hit) => {
       const internal = editMode.sourceFaceToTriangle[hit.faceIndex];
       return internal < 0 || !editMode.isTriangleHidden?.(internal);
     });
+    visibilityRaycaster.layers.mask = previousMask;
     if (!first) return true;
     const point = candidate.aWorld.clone().lerp(candidate.bWorld, candidate.t);
     const edgeDistance = camera.position.distanceTo(point);
