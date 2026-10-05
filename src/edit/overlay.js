@@ -17,6 +17,7 @@ export class EditOverlay {
     this.group = null;
     this.points = null;
     this.lines = null;
+    this.pointVertexIds = [];
     this.edgeKeys = [];
   }
 
@@ -40,10 +41,21 @@ export class EditOverlay {
     this.group = null;
     this.points = null;
     this.lines = null;
+    this.pointVertexIds = [];
     this.edgeKeys = [];
   }
 
-  refresh({ vertices, edges, triangles, triangleToFaceGroup, selectionMode, selectedVertices, selectedEdges, selectedTriangles }) {
+  refresh({
+    vertices,
+    edges,
+    triangles,
+    triangleToFaceGroup,
+    selectionMode,
+    selectedVertices,
+    selectedEdges,
+    selectedTriangles,
+    hiddenTriangles = new Set(),
+  }) {
     if (!this.group) return;
     for (const child of [...this.group.children]) {
       this.group.remove(child);
@@ -51,9 +63,19 @@ export class EditOverlay {
       child.material?.dispose?.();
     }
 
+    const visibleVertices = new Set();
+    triangles.forEach((triangle, triangleIndex) => {
+      if (hiddenTriangles.has(triangleIndex)) return;
+      triangle.v.forEach((vertexId) => visibleVertices.add(vertexId));
+    });
+    if (!hiddenTriangles.size) vertices.forEach((_, index) => visibleVertices.add(index));
+
     const pointPositions = [];
     const pointColors = [];
+    this.pointVertexIds = [];
     vertices.forEach((vertex, index) => {
+      if (!visibleVertices.has(index)) return;
+      this.pointVertexIds.push(index);
       pointPositions.push(vertex.position.x, vertex.position.y, vertex.position.z);
       const color = selectedVertices.has(index) ? ORANGE : VERTEX_IDLE;
       pointColors.push(color.r, color.g, color.b);
@@ -65,7 +87,8 @@ export class EditOverlay {
       size: selectionMode === 'vertex' ? 9 : 5,
       sizeAttenuation: false,
       vertexColors: true,
-      depthTest: true,
+      // Match picking semantics: occluded components should not look selectable.
+      depthTest: selectionMode === 'vertex',
       depthWrite: false,
     }));
     this.points.renderOrder = 102;
@@ -76,12 +99,15 @@ export class EditOverlay {
     this.edgeKeys = [];
     edges.forEach((edge) => {
       if (!isLogicalEdge(edge, triangleToFaceGroup)) return;
+      if (edge.triangles.length && edge.triangles.every((id) => hiddenTriangles.has(id))) return;
 
       const a = vertices[edge.a].position;
       const b = vertices[edge.b].position;
       edgePositions.push(a.x, a.y, a.z, b.x, b.y, b.z);
       this.edgeKeys.push(edge.key);
-      const faceSelected = edge.triangles.some((triangleIndex) => selectedTriangles.has(triangleIndex));
+      const faceSelected = edge.triangles.some((triangleIndex) => (
+        !hiddenTriangles.has(triangleIndex) && selectedTriangles.has(triangleIndex)
+      ));
       const vertexSelected = selectedVertices.has(edge.a) && selectedVertices.has(edge.b);
       const selected = selectionMode === 'edge'
         ? selectedEdges.has(edge.key)
@@ -94,7 +120,8 @@ export class EditOverlay {
     edgeGeometry.setAttribute('color', new THREE.Float32BufferAttribute(edgeColors, 3));
     this.lines = new THREE.LineSegments(edgeGeometry, new THREE.LineBasicMaterial({
       vertexColors: true,
-      depthTest: false,
+      depthTest: selectionMode !== 'face',
+      depthWrite: false,
       transparent: true,
       opacity: selectionMode === 'edge' ? 1 : 0.72,
     }));
@@ -104,23 +131,28 @@ export class EditOverlay {
     if (selectedTriangles.size) {
       const positions = [];
       for (const triangleIndex of selectedTriangles) {
+        if (hiddenTriangles.has(triangleIndex)) continue;
         const triangle = triangles[triangleIndex];
+        if (!triangle) continue;
         for (const vertexId of triangle.v) {
           const p = vertices[vertexId].position;
           positions.push(p.x, p.y, p.z);
         }
       }
-      const faceGeometry = new THREE.BufferGeometry();
-      faceGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      const faces = new THREE.Mesh(faceGeometry, new THREE.MeshBasicMaterial({
-        color: ORANGE,
-        transparent: true,
-        opacity: 0.2,
-        side: THREE.DoubleSide,
-        depthTest: false,
-      }));
-      faces.renderOrder = 100;
-      this.group.add(faces);
+      if (positions.length) {
+        const faceGeometry = new THREE.BufferGeometry();
+        faceGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        const faces = new THREE.Mesh(faceGeometry, new THREE.MeshBasicMaterial({
+          color: ORANGE,
+          transparent: true,
+          opacity: 0.2,
+          side: THREE.DoubleSide,
+          depthTest: false,
+          depthWrite: false,
+        }));
+        faces.renderOrder = 100;
+        this.group.add(faces);
+      }
     }
   }
 }
