@@ -9,6 +9,11 @@ const TOOL_ICONS = Object.freeze([
   { selector: '[data-snap]', id: '79942', name: 'Magnet' },
   { selector: '[data-action="delete"], [data-action="edit-delete"]', id: '67884', name: 'Delete' },
 
+  // Edit selection modes.
+  { selector: '[data-edit-select-mode="vertex"]', id: '78599', name: 'Filled Circle' },
+  { selector: '[data-edit-select-mode="edge"]', id: '78650', name: 'Line' },
+  { selector: '[data-edit-select-mode="face"]', id: '123926', name: 'Square Border' },
+
   // Modeling tools. Icons are deliberately kept in one monochrome Icons8 family.
   { selector: '[data-action="edit-extrude"]', id: '78554', name: '3D Object' },
   { selector: '[data-action="edit-inset"]', id: '78886', name: 'Indent' },
@@ -35,6 +40,10 @@ function sourceUrl(id, name = '') {
   return `https://icons8.com/icon/${encodeURIComponent(id)}/${slug || 'icon'}`;
 }
 
+function currentLanguage() {
+  return window.__gluestackI18n?.getLanguage?.() === 'en' ? 'en' : 'ru';
+}
+
 function ensureStyle() {
   if (document.querySelector('style[data-icons8-tools-style]')) return;
   const style = document.createElement('style');
@@ -42,11 +51,12 @@ function ensureStyle() {
   style.textContent = `
     .icons8-tool-icon{width:17px;height:17px;object-fit:contain;display:block;pointer-events:none;opacity:.86;image-rendering:auto}
     .menu-popover .icons8-tool-icon{width:15px;height:15px;justify-self:center}
-    .uv-action .icons8-tool-icon{width:15px;height:15px}
+    .uv-action .icons8-tool-icon,.selection-mode-button .icons8-tool-icon{width:15px;height:15px}
     .icons8-tool-bound.icons8-tool-ready>svg,
     .icons8-tool-bound.icons8-tool-ready>i[data-lucide]{display:none!important}
     .tool-button.icons8-tool-ready:hover .icons8-tool-icon,
-    .tool-button.icons8-tool-ready.active .icons8-tool-icon{opacity:1;filter:brightness(1.18)}
+    .tool-button.icons8-tool-ready.active .icons8-tool-icon,
+    .selection-mode-button.icons8-tool-ready.active .icons8-tool-icon{opacity:1;filter:brightness(1.18)}
     .tool-button.danger.icons8-tool-ready:hover .icons8-tool-icon{filter:sepia(1) saturate(5) hue-rotate(320deg) brightness(1.22)}
     .icons8-credit{margin-left:8px;color:var(--muted,#8e8e8e);font-size:9px;text-decoration:none;white-space:nowrap;opacity:.74}
     .icons8-credit:hover{color:var(--text,#ddd);opacity:1;text-decoration:underline}
@@ -97,6 +107,14 @@ function scan(root = document) {
   }
 }
 
+function updateCreditText() {
+  const ru = currentLanguage() === 'ru';
+  document.querySelectorAll('.icons8-credit').forEach((credit) => {
+    credit.textContent = ru ? 'Иконки: Icons8' : 'Icons by Icons8';
+    credit.title = ru ? 'Иконки инструментов предоставлены Icons8' : 'Tool icons by Icons8';
+  });
+}
+
 function ensureCredit() {
   let credit = document.querySelector('.icons8-credit[data-icons8-credit]');
   if (!credit) {
@@ -106,8 +124,6 @@ function ensureCredit() {
     credit.href = ICONS8_CREDIT_URL;
     credit.target = '_blank';
     credit.rel = 'noreferrer';
-    credit.textContent = 'Icons by Icons8';
-    credit.title = 'Tool icons by Icons8';
     const status = document.querySelector('.status-bar');
     if (status) status.appendChild(credit);
   }
@@ -119,6 +135,7 @@ function ensureCredit() {
     delete link.dataset.icons8Credit;
     homeFooter.appendChild(link);
   }
+  updateCreditText();
 }
 
 export function installIcons8Tools() {
@@ -139,6 +156,7 @@ export function installIcons8Tools() {
     });
   });
   observer.observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('gluestack:language-changed', updateCreditText);
 
   const api = {
     source: 'Icons8',
@@ -149,6 +167,7 @@ export function installIcons8Tools() {
     dispose() {
       observer.disconnect();
       if (frame) cancelAnimationFrame(frame);
+      window.removeEventListener('gluestack:language-changed', updateCreditText);
     },
   };
   window.__gluestackIcons8Tools = api;
