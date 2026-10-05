@@ -33,7 +33,7 @@ function selectableObjects(editor) {
 
 function editPoint(editMode, vertexId, rect) {
   const vertex = editMode.vertices[vertexId];
-  if (!vertex || editMode.isVertexHidden?.(vertexId)) return null;
+  if (!vertex) return null;
   editMode.mesh.updateWorldMatrix(true, false);
   return projectWorld(editMode.editor, vertex.position.clone().applyMatrix4(editMode.mesh.matrixWorld), rect);
 }
@@ -62,12 +62,10 @@ function applyEditCircle(editMode, center, radius, subtract, rect) {
 
   if (editMode.selectionMode === 'vertex') {
     editMode.vertices.forEach((_, vertexId) => {
-      if (editMode.isVertexHidden?.(vertexId)) return;
       if (withinCircle(editPoint(editMode, vertexId, rect), center, radius)) mutate(vertexId);
     });
   } else if (editMode.selectionMode === 'edge') {
-    for (const edge of editMode.logicalEdges) {
-      if (editMode.isEdgeHidden?.(edge)) continue;
+    for (const edge of editMode.edges) {
       const a = editPoint(editMode, edge.a, rect);
       const b = editPoint(editMode, edge.b, rect);
       if (!a || !b) continue;
@@ -76,10 +74,8 @@ function applyEditCircle(editMode, center, radius, subtract, rect) {
     }
   } else {
     for (const group of editMode.faceGroups) {
-      if ((group.triangles ?? []).every((index) => editMode.isTriangleHidden?.(index))) continue;
       const vertices = new Set();
       for (const triangleIndex of group.triangles ?? []) {
-        if (editMode.isTriangleHidden?.(triangleIndex)) continue;
         for (const vertexId of editMode.triangles[triangleIndex]?.v ?? []) vertices.add(vertexId);
       }
       let x = 0;
