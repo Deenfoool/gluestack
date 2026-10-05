@@ -11,6 +11,46 @@ async function loadAndInstall(editor, name, loader, installer) {
   }
 }
 
+function installProjectDelete(projects) {
+  if (!projects || projects.deleteRecord) return;
+  projects.deleteRecord = async (id) => {
+    const db = await projects.dbPromise;
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('projects', 'readwrite');
+      tx.objectStore('projects').delete(id);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error('IndexedDB delete aborted'));
+    });
+  };
+}
+
+function makeHomeImporter({ editor, projects, importer }) {
+  if (!importer?.importFiles) return importer;
+  return {
+    ...importer,
+    importFiles: async (files) => {
+      const previousLoading = projects.isLoading;
+      projects.isLoading = true;
+      try {
+        editor.clearSelection();
+        for (const child of [...editor.modelRoot.children]) {
+          editor.modelRoot.remove(child);
+          editor.disposeObjectResources(child);
+        }
+        editor.registerAnimations?.([], { replace: true });
+        editor.cancelHistory?.();
+        editor.clearHistoryStack?.(editor.undoStack);
+        editor.clearHistoryStack?.(editor.redoStack);
+        editor.emitHistory?.();
+      } finally {
+        projects.isLoading = previousLoading;
+      }
+      return importer.importFiles(files);
+    },
+  };
+}
+
 async function installFeaturesOnce({ editor, editMode, knifeTool }) {
   const i18n = await loadAndInstall(editor, 'Localization', () => import('./runtime/i18n.js'), ({ installI18n }) => installI18n({ editor }));
   const resources = await loadAndInstall(editor, 'Resource ownership', () => import('./runtime/resource-ownership.js'), ({ installResourceOwnership }) => installResourceOwnership(editor));
@@ -43,6 +83,18 @@ async function installFeaturesOnce({ editor, editMode, knifeTool }) {
   const materials = await loadAndInstall(editor, 'Materials', () => import('./materials/integration.js'), ({ installMaterialPanel }) => installMaterialPanel({ editor }));
   const projects = await loadAndInstall(editor, 'Projects', () => import('./projects/integration.js'), ({ installProjects }) => installProjects({ editor, editMode, knifeTool }));
   const settings = await loadAndInstall(editor, 'Settings', () => import('./runtime/settings.js'), ({ installSettings }) => installSettings({ editor, projects, i18n }));
+  installProjectDelete(projects);
+  const homeImporter = makeHomeImporter({ editor, projects, importer });
+  const home = await loadAndInstall(editor, 'Home', () => import('./runtime/home.js'), ({ installHome }) => installHome({
+    editor,
+    projects,
+    settings,
+    i18n,
+    importer: homeImporter,
+    editMode,
+    knifeTool,
+  }));
+
   const gameReady = await loadAndInstall(editor, 'Game Ready', () => import('./game-ready/integration.js'), ({ installGameReady }) => installGameReady({ editor }));
   const gameReadyValidator = await loadAndInstall(editor, 'Game Ready validator v2', () => import('./game-ready/validator-v2.js'), ({ installGameReadyValidatorV2 }) => installGameReadyValidatorV2({ editor, gameReady }));
   const lodPolicy = await loadAndInstall(editor, 'LOD policy', () => import('./game-ready/lod-policy.js'), ({ installLODPolicy }) => installLODPolicy({ editor, gameReady }));
@@ -74,7 +126,7 @@ async function installFeaturesOnce({ editor, editMode, knifeTool }) {
   const installed = {
     i18n,
     uv, advancedUV, smartIslands, harmonicUnwrap, uvRelax, uvIslandTools,
-    materials, projects, settings, gameReady, gameReadyValidator, lodPolicy, optimizerV2, exportProfiles, cleanupAudit,
+    materials, projects, settings, home, gameReady, gameReadyValidator, lodPolicy, optimizerV2, exportProfiles, cleanupAudit,
     paint, procedural, scene, hardening, resources, transformIntegrity, importer, integrity,
     viewportHistory, animations, animationEditor, dopeSheet, modifierStack, metadataPolicy, cleanExport, exportSelected,
   };
