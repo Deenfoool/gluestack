@@ -1,3 +1,4 @@
+import { componentVisible } from '../edit/component-visibility.js';
 import * as THREE from 'three';
 
 // Collections are containers; selection acts on visible scene objects.
@@ -17,7 +18,7 @@ export function projectWorld(editor, world, rect) {
 
 export function projectEditVertices(editMode, rect) {
   editMode.mesh.updateWorldMatrix(true, false);
-  return editMode.vertices.map(vertex => projectWorld(editMode.editor, vertex.position.clone().applyMatrix4(editMode.mesh.matrixWorld), rect));
+  return editMode.vertices.map((vertex,id) => componentVisible(editMode,'vertex',id) ? projectWorld(editMode.editor, vertex.position.clone().applyMatrix4(editMode.mesh.matrixWorld), rect) : null);
 }
 
 export function segmentDistanceSquared(point, a, b) {

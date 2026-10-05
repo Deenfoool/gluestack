@@ -1,5 +1,6 @@
+import { componentVisible } from '../edit/component-visibility.js';
 function selectionTopology(editMode) {
-  const edges = new Map(editMode.logicalEdges.map(edge => [edge.key, edge]));
+  const edges = new Map(editMode.logicalEdges.filter(edge => componentVisible(editMode,'edge',edge.key)).map(edge => [edge.key, edge]));
   const byEdge = new Map();
   const byVertex = new Map();
   const quads = new Set();
@@ -10,6 +11,7 @@ function selectionTopology(editMode) {
     }
   }
   for (const group of editMode.faceGroups) {
+    if (!componentVisible(editMode,'face',group.id)) continue;
     const boundary = group.boundary ?? [];
     const degree = new Map();
     const keys = new Set();
@@ -155,7 +157,7 @@ function selectByMaterial(editMode) {
     editMode.status('Select by Material: переключитесь в Face Select');
     return false;
   }
-  const seeds = editMode.faceGroups.filter(group => editMode.selectedFaces.has(group.id));
+  const seeds = editMode.faceGroups.filter(group => componentVisible(editMode,'face',group.id) && editMode.selectedFaces.has(group.id));
   if (!seeds.length) {
     editMode.status('Select by Material: сначала выберите грань');
     return false;
@@ -164,6 +166,7 @@ function selectByMaterial(editMode) {
   for (const group of seeds) materialSlots(editMode, group).forEach(slot => slots.add(slot));
   editMode.selectedFaces.clear();
   for (const group of editMode.faceGroups) {
+    if (!componentVisible(editMode,'face',group.id)) continue;
     if ([...materialSlots(editMode, group)].some(slot => slots.has(slot))) editMode.selectedFaces.add(group.id);
   }
   refreshSelection(editMode);

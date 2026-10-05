@@ -1,3 +1,4 @@
+import { restoreSourceLayers } from '../edit/component-visibility.js';
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
@@ -54,6 +55,7 @@ function makeExportRoot(editor, objects) {
   for (const source of objects) {
     source.updateWorldMatrix(true, true);
     const clone = cloneSkeleton(source);
+    restoreSourceLayers(source, clone);
     source.matrixWorld.decompose(clone.position, clone.quaternion, clone.scale);
     clone.updateMatrix();
     root.add(clone);

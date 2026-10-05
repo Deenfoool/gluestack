@@ -1,3 +1,4 @@
+import { restoreSourceLayers } from '../edit/component-visibility.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { sanitizeRootUserData } from '../runtime/metadata-policy.js';
 import {
@@ -117,6 +118,7 @@ export class ProjectController {
     const stack = project ? await this.waitForModifierStack() : null;
     const payload = stack?.createProjectExportRoot?.() ?? null;
     const root = payload?.root ?? (project ? cloneSkeleton(this.editor.modelRoot) : this.editor.modelRoot);
+    if (project) restoreSourceLayers(this.editor.modelRoot, root);
     if (project) sanitizeRootUserData(root, 'project');
     try {
       return await new Promise((resolve, reject) => {

@@ -1,8 +1,10 @@
+import { restoreSourceLayers } from '../edit/component-visibility.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { sanitizeRootUserData } from './metadata-policy.js';
 
 export function createCleanExportRoot(editor) {
   const root = cloneSkeleton(editor.modelRoot);
+  restoreSourceLayers(editor.modelRoot, root);
   sanitizeRootUserData(root, 'runtime');
   return root;
 }

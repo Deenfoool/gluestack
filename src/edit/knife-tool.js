@@ -132,9 +132,9 @@ export class KnifeTool {
     this.editor.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.editor.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     this.editor.raycaster.setFromCamera(this.editor.pointer, this.editor.camera);
-    const hit = this.editor.raycaster.intersectObject(this.editMode.mesh, false)[0];
+    const hit = this.editor.raycaster.intersectObject(this.editMode.selectionSurface(), false)[0];
     if (!hit) return null;
-    const triangleId = this.editMode.sourceFaceToTriangle[hit.faceIndex];
+    const triangleId = this.editMode.triangleForHit(hit);
     const groupId = triangleId >= 0 ? this.editMode.triangleToFaceGroup[triangleId] : -1;
     const group = this.editMode.faceGroups[groupId];
     if (!group) return null;

@@ -1,3 +1,4 @@
+import { sourceLayerMask } from './edit/component-visibility.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
@@ -541,6 +542,7 @@ export class Editor3D {
 
   cloneObjectDeep(source) {
     const clone = source.clone(false);
+    clone.layers.mask = sourceLayerMask(source);
     clone.clear();
     if (source.geometry) clone.geometry = source.geometry.clone();
     if (source.material) {

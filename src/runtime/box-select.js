@@ -1,3 +1,4 @@
+import { componentVisible } from '../edit/component-visibility.js';
 import * as THREE from 'three';
 import { selectableObjects, projectWorld, projectEditVertices, segmentIntersectsRect } from './selection-geometry.js';
 
@@ -75,6 +76,7 @@ function selectEdit(editMode, rect, additive, subtract, canvasRect) {
     });
   } else if (editMode.selectionMode === 'edge') {
     for (const edge of editMode.logicalEdges) {
+      if (!componentVisible(editMode,'edge',edge.key)) continue;
       const a = points[edge.a];
       const b = points[edge.b];
       if (!a || !b) continue;
@@ -84,6 +86,7 @@ function selectEdit(editMode, rect, additive, subtract, canvasRect) {
     }
   } else {
     for (const group of editMode.faceGroups) {
+      if (!componentVisible(editMode,'face',group.id)) continue;
       const vertices = new Set();
       for (const triangleIndex of group.triangles ?? []) {
         for (const vertexId of editMode.triangles[triangleIndex]?.v ?? []) vertices.add(vertexId);

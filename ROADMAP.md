@@ -315,12 +315,12 @@ Fixture-набор создан в `tests/fixtures/`; реальный PASS ос
 - [x] Select All / Invert / None в Object/Edit.
 - [x] Select Linked.
 
-> Selection batches: общий Select menu, logical-edge/hidden-object fixes, quad Loop/Ring и material-slot union; 23 Node selection regressions PASS. Семантика и ограничения: [docs/MODELING_SELECTION.md](docs/MODELING_SELECTION.md). Browser/WebGL release QA остаётся открытым.
+> Selection batches: общий Select menu, logical-edge/hidden-object fixes, quad Loop/Ring, material-slot union и временный Hide/Reveal компонентов; 37 Node selection/visibility regressions PASS. Семантика и ограничения: [docs/MODELING_SELECTION.md](docs/MODELING_SELECTION.md). Browser/WebGL release QA остаётся открытым.
 
 - [x] Edge Loop Select.
 - [x] Edge Ring Select.
 - [x] Select by Material.
-- [ ] Hide / Unhide Edit components.
+- [x] Hide / Unhide Edit components.
 - [ ] Edge Slide / Vertex Slide.
 - [ ] Duplicate geometry внутри Edit Mode.
 - [ ] Separate by Selection / Material / Loose Parts.

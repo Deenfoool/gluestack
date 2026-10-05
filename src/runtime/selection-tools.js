@@ -1,3 +1,4 @@
+import { componentVisible } from '../edit/component-visibility.js';
 import { selectableObjects } from './selection-geometry.js';
 
 function refreshEdit(editMode) {
@@ -16,7 +17,7 @@ function invertEditSelection(editMode) {
   if (!editMode.active) return false;
   const selected = editMode.currentSelectionSet();
   const inverted = new Set();
-  for (const key of editUniverse(editMode)) if (!selected.has(key)) inverted.add(key);
+  for (const key of editUniverse(editMode)) if (componentVisible(editMode,editMode.selectionMode,key) && !selected.has(key)) inverted.add(key);
   selected.clear();
   inverted.forEach((key) => selected.add(key));
   refreshEdit(editMode);
@@ -32,6 +33,9 @@ function connectedVertices(editMode, seeds) {
   const adjacency = new Map();
   for (let index = 0; index < editMode.vertices.length; index += 1) adjacency.set(index, new Set());
   for (const edge of editMode.edges) {
+    if (!componentVisible(editMode,'vertex',edge.a) || !componentVisible(editMode,'vertex',edge.b)
+      || !componentVisible(editMode,'edge',edge.key)) continue;
+    if (edge.triangles?.length && !edge.triangles.some(id => componentVisible(editMode,'face',editMode.triangleToFaceGroup[id]))) continue;
     adjacency.get(edge.a)?.add(edge.b);
     adjacency.get(edge.b)?.add(edge.a);
   }
@@ -61,13 +65,14 @@ function selectLinked(editMode) {
   target.clear();
 
   if (editMode.selectionMode === 'vertex') {
-    linked.forEach((vertex) => target.add(vertex));
+    linked.forEach((vertex) => { if (componentVisible(editMode,'vertex',vertex)) target.add(vertex); });
   } else if (editMode.selectionMode === 'edge') {
     for (const edge of editMode.logicalEdges) {
-      if (linked.has(edge.a) && linked.has(edge.b)) target.add(edge.key);
+      if (componentVisible(editMode,'edge',edge.key) && linked.has(edge.a) && linked.has(edge.b)) target.add(edge.key);
     }
   } else {
     for (const group of editMode.faceGroups) {
+      if (!componentVisible(editMode,'face',group.id)) continue;
       const groupVertices = new Set();
       for (const triangleIndex of group.triangles ?? []) {
         for (const vertex of editMode.triangles[triangleIndex]?.v ?? []) groupVertices.add(vertex);

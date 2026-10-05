@@ -1,3 +1,4 @@
+import { componentVisible } from '../edit/component-visibility.js';
 import * as THREE from 'three';
 import { selectableObjects, objectCenter, projectEditVertices, segmentDistanceSquared } from './selection-geometry.js';
 
@@ -37,6 +38,7 @@ function applyEditCircle(editMode, center, radius, subtract, rect) {
     });
   } else if (editMode.selectionMode === 'edge') {
     for (const edge of editMode.logicalEdges) {
+      if (!componentVisible(editMode,'edge',edge.key)) continue;
       const a = points[edge.a];
       const b = points[edge.b];
       if (!a || !b) continue;
@@ -44,6 +46,7 @@ function applyEditCircle(editMode, center, radius, subtract, rect) {
     }
   } else {
     for (const group of editMode.faceGroups) {
+      if (!componentVisible(editMode,'face',group.id)) continue;
       const vertices = new Set();
       for (const triangleIndex of group.triangles ?? []) {
         for (const vertexId of editMode.triangles[triangleIndex]?.v ?? []) vertices.add(vertexId);

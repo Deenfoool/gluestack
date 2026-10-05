@@ -13,6 +13,9 @@ Object and Edit modes share the **Select** menu and shortcuts:
 | By Material | Shift+M | Face mode: select all faces matching any selected face's material slot |
 | Box | B | Drag LMB to replace, Shift to add, Ctrl/Cmd to subtract; Escape cancels |
 | Circle | C | LMB paints add, Ctrl/Cmd+LMB paints subtract; wheel changes radius; Enter/Escape finishes |
+| Hide Selected | H | Edit mode: hide selected components and remove them from selection |
+| Hide Unselected | Shift+H | Edit mode: isolate the current selection |
+| Reveal All | Alt+H | Restore hidden components, keeping the surviving selection |
 
 Object selection includes visible meshes, lines, points, lights and cameras. A hidden parent excludes its entire subtree. Collections remain containers, selectable explicitly in the Outliner. Box uses projected object bounds; Circle uses object bounds centers. Cameras/lights with no geometry use their world origins.
 
@@ -28,8 +31,18 @@ The editor currently groups connected coplanar triangles of the same material in
 
 Select by Material uses material **slot indices on the edited mesh**, taking the union of all seed faces' slots. Separate GLTF material primitives remain separate meshes after import; selection does not cross into other objects. No geometry or history is changed by these selection commands.
 
+## Temporary Edit visibility
+
+Hide Selected / Hide Unselected / Reveal All are available in the Mesh menu. Hidden components are excluded from point/edge/face picking, All/Invert/Linked, Box/Circle, Loop/Ring and By Material. Knife uses the visible surface and maps its triangle hits back to the original topology. Hiding a vertex or edge hides its adjacent logical faces. Hiding faces preserves shared borders, but hides vertices/edges belonging only to hidden faces; loose vertices remain available. Isolating vertices or edges can leave visible loose points/lines with no remaining surface.
+
+Visibility is temporary viewport state. It survives component mode changes and position-only topology regrouping. Alt+H, leaving Edit Mode, or a topology-changing mesh rebuild reveals everything. Hide/Reveal does not create a geometry Undo entry or persist in `.gluestack`; Undo/Redo leaves Edit Mode and restores geometry normally. Topology regrouping retains hidden triangles and conservatively hides an entire newly merged logical polygon if any of its triangles was hidden.
+
+The viewport uses a separate filtered surface and a temporary render-layer mask on the source mesh. Source geometry, UV, material groups, morph data and child visibility stay intact. Canonical history/export clones restore the source layer mask. GLB and `.gluestack` contain the entire model, including temporarily hidden geometry. Repeated selection refreshes reuse the filtered geometry; replaced proxy geometry is disposed without disposing shared materials. Instanced/Batched meshes refuse component hiding before changing state.
+
 ## Validation
 
-`npm test` includes 23 Modeling selection regressions using real Three.js cameras/objects, the Edit controller selection methods, JSDOM pointer dispatch, and the installed keyboard/menu handlers. Coverage includes logical edges, disconnected islands, hidden ancestors, light selection, additive/subtractive selection, segment hit accuracy, vertex/edge/face modes, cancellation, Home, and form focus. Topology coverage includes real warped quad grids and a torus, open boundaries, multiple seeds, cube poles, merged n-gons, non-manifold edges, disconnected fans, stale/diagonal seeds, material-slot unions, actual multi-material GLB export/import and the Loop/Ring/Material menu/shortcut handlers.
+`npm test` includes 37 Modeling selection/visibility regressions using real Three.js cameras/objects, the Edit controller selection methods, JSDOM pointer dispatch, and the installed keyboard/menu handlers. Coverage includes logical edges, disconnected islands, hidden ancestors, light selection, additive/subtractive selection, segment hit accuracy, vertex/edge/face modes, cancellation, Home, and form focus. Topology coverage includes real warped quad grids and a torus, open boundaries, multiple seeds, cube poles, merged n-gons, non-manifold edges, disconnected fans, stale/diagonal seeds, material-slot unions, actual multi-material GLB export/import and the Loop/Ring/Material menu/shortcut handlers.
+
+The 14 visibility regressions cover isolation in all component modes, selection/picking/Knife, hidden Loop/Ring seeds, resource release, proxy reuse, canonical history layers, real GLB and binary `.gluestack` roundtrips, topology regrouping/rebuilds, multi-material/morph/child handling, unsupported instances, and keyboard/menu actions.
 
 Automated Node checks pass. Browser/WebGL QA on primitive and imported models is still required; the available browser has WebGL disabled. This document does not close the roadmap release gates.

@@ -1,3 +1,4 @@
+import { ComponentVisibility, componentVisible } from './component-visibility.js';
 import * as THREE from 'three';
 import { EditOverlay } from './overlay.js';
 import {
@@ -32,6 +33,7 @@ export class EditModeController {
       onChange: events.onChange ?? (() => {}),
       onStatus: events.onStatus ?? ((message) => editor.events.onStatus(message)),
     };
+    this.visibility = new ComponentVisibility(this);
     this.active = false;
     this.mesh = null;
     this.selectionMode = 'vertex';
@@ -89,6 +91,7 @@ export class EditModeController {
   exit() {
     if (!this.active) return false;
     const mesh = this.mesh;
+    this.visibility?.reset();
     this.overlay.dispose();
     this.editor.transform.detach();
     this.editor.scene.remove(this.pivot);
@@ -122,13 +125,22 @@ export class EditModeController {
   }
 
   loadTopology() {
+    this.visibility?.reset();
     Object.assign(this, readMeshTopology(this.mesh));
     this.updateLogicalEdges();
   }
 
   rebuildTopologyOnly() {
+    const previousGroups = this.faceGroups;
     Object.assign(this, buildTopology(this.vertices, this.triangles));
     this.updateLogicalEdges();
+    this.visibility?.remapFaces(previousGroups);
+  }
+
+  selectionSurface() { return this.visibility?.surface ?? this.mesh; }
+
+  triangleForHit(hit) {
+    return this.visibility?.surface ? this.visibility.surfaceTriangles[hit.faceIndex] : this.sourceFaceToTriangle[hit.faceIndex];
   }
 
   handlePointerUp(event) {
@@ -147,7 +159,7 @@ export class EditModeController {
     if (this.selectionMode === 'vertex') {
       this.editor.raycaster.params.Points.threshold = 0.14;
       const hit = this.editor.raycaster.intersectObject(this.overlay.points, false)[0];
-      this.selectComponent(hit ? hit.index : null, additive);
+      this.selectComponent(hit ? this.overlay.vertexIds[hit.index] : null, additive);
       return;
     }
     if (this.selectionMode === 'edge') {
@@ -159,8 +171,8 @@ export class EditModeController {
       return;
     }
 
-    const hit = this.editor.raycaster.intersectObject(this.mesh, false)[0];
-    const internalTriangle = hit ? this.sourceFaceToTriangle[hit.faceIndex] : -1;
+    const hit = this.editor.raycaster.intersectObject(this.selectionSurface(), false)[0];
+    const internalTriangle = hit ? this.triangleForHit(hit) : -1;
     const faceGroup = internalTriangle >= 0 ? this.triangleToFaceGroup[internalTriangle] : null;
     this.selectComponent(faceGroup >= 0 ? faceGroup : null, additive);
   }
@@ -168,7 +180,7 @@ export class EditModeController {
   selectEdgeKey(key, additive = false) {
     const set = this.selectedEdges;
     if (!additive) set.clear();
-    if (key !== null && key !== undefined) {
+    if (key !== null && key !== undefined && componentVisible(this, 'edge', key)) {
       if (additive && set.has(key)) set.delete(key);
       else set.add(key);
     }
@@ -182,7 +194,7 @@ export class EditModeController {
     if (!additive) set.clear();
     if (index !== null && index !== undefined) {
       const key = this.selectionMode === 'edge' ? this.logicalEdges[index]?.key : index;
-      if (key !== undefined) {
+      if (key !== undefined && componentVisible(this, this.selectionMode, key)) {
         if (additive && set.has(key)) set.delete(key);
         else set.add(key);
       }
@@ -217,9 +229,9 @@ export class EditModeController {
   selectAll() {
     const set = this.currentSelectionSet();
     set.clear();
-    if (this.selectionMode === 'vertex') this.vertices.forEach((_, index) => set.add(index));
-    else if (this.selectionMode === 'edge') this.logicalEdges.forEach((edge) => set.add(edge.key));
-    else this.faceGroups.forEach((group) => set.add(group.id));
+    if (this.selectionMode === 'vertex') this.vertices.forEach((_, index) => { if (componentVisible(this,'vertex',index)) set.add(index); });
+    else if (this.selectionMode === 'edge') this.logicalEdges.forEach((edge) => { if (componentVisible(this,'edge',edge.key)) set.add(edge.key); });
+    else this.faceGroups.forEach((group) => { if (componentVisible(this,'face',group.id)) set.add(group.id); });
     this.refreshOverlay();
     this.updatePivot();
     this.emitChange();
@@ -265,7 +277,9 @@ export class EditModeController {
 
   refreshOverlay() {
     if (!this.active) return;
+    this.visibility?.refreshSurface();
     this.overlay.refresh({
+      visibility: this.visibility,
       vertices: this.vertices,
       edges: this.logicalEdges,
       triangles: this.triangles,

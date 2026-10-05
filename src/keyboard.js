@@ -43,6 +43,9 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
     'select-edge-loop': () => advancedSelection.selectEdgeLoop(),
     'select-edge-ring': () => advancedSelection.selectEdgeRing(),
     'select-material': () => advancedSelection.selectByMaterial(),
+    'edit-hide-selected': () => editMode.visibility?.hide(),
+    'edit-hide-unselected': () => editMode.visibility?.hide(true),
+    'edit-reveal': () => editMode.visibility?.reveal(),
     'select-box': () => boxSelect?.begin(),
     'select-circle': () => circleSelect?.begin(),
   };
@@ -149,6 +152,7 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
     }
 
     if (editMode.active) {
+      if (!commandKey && event.code === 'KeyH') { event.preventDefault(); if (event.altKey) editMode.visibility?.reveal(); else editMode.visibility?.hide(event.shiftKey); return; }
       if (event.code === 'Digit1') { event.preventDefault(); editMode.setSelectionMode('vertex'); return; }
       if (event.code === 'Digit2') { event.preventDefault(); editMode.setSelectionMode('edge'); return; }
       if (event.code === 'Digit3') { event.preventDefault(); editMode.setSelectionMode('face'); return; }

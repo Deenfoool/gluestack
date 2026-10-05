@@ -18,6 +18,7 @@ export class EditOverlay {
     this.points = null;
     this.lines = null;
     this.edgeKeys = [];
+    this.vertexIds = [];
   }
 
   mount(mesh) {
@@ -41,9 +42,10 @@ export class EditOverlay {
     this.points = null;
     this.lines = null;
     this.edgeKeys = [];
+    this.vertexIds = [];
   }
 
-  refresh({ vertices, edges, triangles, triangleToFaceGroup, selectionMode, selectedVertices, selectedEdges, selectedTriangles }) {
+  refresh({ visibility, vertices, edges, triangles, triangleToFaceGroup, selectionMode, selectedVertices, selectedEdges, selectedTriangles }) {
     if (!this.group) return;
     for (const child of [...this.group.children]) {
       this.group.remove(child);
@@ -53,7 +55,10 @@ export class EditOverlay {
 
     const pointPositions = [];
     const pointColors = [];
+    this.vertexIds = [];
     vertices.forEach((vertex, index) => {
+      if (visibility?.vertices.has(index)) return;
+      this.vertexIds.push(index);
       pointPositions.push(vertex.position.x, vertex.position.y, vertex.position.z);
       const color = selectedVertices.has(index) ? ORANGE : VERTEX_IDLE;
       pointColors.push(color.r, color.g, color.b);
@@ -75,7 +80,7 @@ export class EditOverlay {
     const edgeColors = [];
     this.edgeKeys = [];
     edges.forEach((edge) => {
-      if (!isLogicalEdge(edge, triangleToFaceGroup)) return;
+      if (!isLogicalEdge(edge, triangleToFaceGroup) || visibility?.edges.has(edge.key)) return;
 
       const a = vertices[edge.a].position;
       const b = vertices[edge.b].position;
@@ -104,6 +109,7 @@ export class EditOverlay {
     if (selectedTriangles.size) {
       const positions = [];
       for (const triangleIndex of selectedTriangles) {
+        if (visibility?.faces.has(triangleToFaceGroup[triangleIndex])) continue;
         const triangle = triangles[triangleIndex];
         for (const vertexId of triangle.v) {
           const p = vertices[vertexId].position;

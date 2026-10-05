@@ -1,3 +1,4 @@
+import { componentVisible } from '../edit/component-visibility.js';
 import * as THREE from 'three';
 
 const PICK_RADIUS_PX = 13;
@@ -76,7 +77,7 @@ export function installVertexPicking({ editor, editMode, knifeTool = null, boxSe
     if (!mesh) return false;
     const camera = editor.camera;
     visibilityRaycaster.setFromCamera(new THREE.Vector2(candidate.ndcX, candidate.ndcY), camera);
-    const first = visibilityRaycaster.intersectObject(mesh, false)[0];
+    const first = visibilityRaycaster.intersectObject(editMode.selectionSurface?.() ?? mesh, false)[0];
     if (!first) return true;
     const candidateDistance = camera.position.distanceTo(candidate.world);
     const tolerance = Math.max(0.002, candidateDistance * 0.0015);
@@ -94,6 +95,7 @@ export function installVertexPicking({ editor, editMode, knifeTool = null, boxSe
     const radiusSq = PICK_RADIUS_PX * PICK_RADIUS_PX;
 
     for (let index = 0; index < editMode.vertices.length; index += 1) {
+      if (!componentVisible(editMode,'vertex',index)) continue;
       const vertex = editMode.vertices[index];
       world.copy(vertex.position).applyMatrix4(mesh.matrixWorld);
       ndc.copy(world).project(editor.camera);
