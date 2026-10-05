@@ -1,5 +1,6 @@
 import { dissolveSelected } from './edit/dissolve.js';
 import { EditModalTools } from './edit/modal-tools.js';
+import { UVModalTransform } from './uv/modal-transform.js';
 import { installSelectionTools } from './runtime/selection-tools.js';
 import { installBoxSelect } from './runtime/box-select.js';
 import { installCircleSelect } from './runtime/circle-select.js';
@@ -10,12 +11,18 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
   const boxSelect = installBoxSelect({ editor, editMode });
   const circleSelect = installCircleSelect({ editor, editMode });
   const advancedSelection = installAdvancedEditSelection({ editMode });
+  const hud = document.querySelector('#transform-hud');
   const modalTools = new EditModalTools({
     editor,
     editMode,
     knifeTool,
     transformModal,
-    hud: document.querySelector('#transform-hud'),
+    hud,
+    status: (message) => editor.events.onStatus(message),
+  });
+  const uvModal = new UVModalTransform({
+    getController: () => window.__gluestackFeatures?.uv?.controller ?? null,
+    hud,
     status: (message) => editor.events.onStatus(message),
   });
 
@@ -26,19 +33,30 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
     'edit-loop-cut': 'loopCut',
   };
 
-  // Intercept modeling buttons before the legacy click handlers in main.js.
-  // This keeps the operation fully interactive and prevents window.prompt().
+  // Intercept modeling buttons before legacy handlers in main.js. Modeling
+  // operations are modal mouse drags now and never open window.prompt().
   document.addEventListener('click', (event) => {
-    const button = event.target.closest?.('[data-action]');
-    const type = actionToModal[button?.dataset.action];
-    if (!type || !editMode.active) return;
+    const actionButton = event.target.closest?.('[data-action]');
+    const type = actionToModal[actionButton?.dataset.action];
+    if (type && editMode.active) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      document.querySelectorAll('.menu[open]').forEach((menu) => menu.removeAttribute('open'));
+      modalTools.begin(type);
+      return;
+    }
+
+    const uvButton = event.target.closest?.('[data-uv-action]');
+    const uvType = uvButton?.dataset.uvAction;
+    if (!['move', 'rotate', 'scale'].includes(uvType)) return;
+    if (document.querySelector('.workspace-tab.active')?.dataset.workspace !== 'uv') return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    document.querySelectorAll('.menu[open]').forEach((menu) => menu.removeAttribute('open'));
-    modalTools.begin(type);
+    uvModal.begin(uvType);
   }, { capture: true });
 
   window.__gluestackEditModalTools = modalTools;
+  window.__gluestackUVModalTransform = uvModal;
 
   window.addEventListener('keydown', (event) => {
     const target = event.target;
@@ -46,8 +64,8 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
     if (typing) return;
 
     // Active modal tools own input until they are confirmed/cancelled. Their
-    // capture-phase handler processes numbers, Enter and Esc.
-    if (modalTools.active) return;
+    // capture-phase handlers process numeric input, Enter and Esc.
+    if (modalTools.active || uvModal.active) return;
 
     if (boxSelect?.active) {
       if (event.code === 'Escape') {
