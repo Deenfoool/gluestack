@@ -77,10 +77,13 @@ export function installVertexPicking({ editor, editMode, knifeTool = null, boxSe
     if (!mesh) return false;
     const camera = editor.camera;
     visibilityRaycaster.setFromCamera(new THREE.Vector2(candidate.ndcX, candidate.ndcY), camera);
+    const previousMask = visibilityRaycaster.layers.mask;
+    visibilityRaycaster.layers.mask = mesh.layers.mask;
     const first = visibilityRaycaster.intersectObject(mesh, false).find((hit) => {
       const internal = editMode.sourceFaceToTriangle?.[hit.faceIndex] ?? -1;
       return internal < 0 || !editMode.isTriangleHidden?.(internal);
     });
+    visibilityRaycaster.layers.mask = previousMask;
     if (!first) return true;
     const candidateDistance = camera.position.distanceTo(candidate.world);
     const tolerance = Math.max(0.002, candidateDistance * 0.0015);
