@@ -13,47 +13,6 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
   const circleSelect = installCircleSelect({ editor, editMode });
   const advancedSelection = installAdvancedEditSelection({ editMode });
   const vertexPicking = installVertexPicking({ editor, editMode, knifeTool, boxSelect, circleSelect });
-
-  // The advanced Edit Mode UX pack is intentionally NOT part of the startup
-  // dependency graph. Home must always boot even if a modeling-only module has a
-  // syntax/runtime regression, and expensive edge-picking code should not exist
-  // until the user actually enters Edit Mode.
-  let editUX = null;
-  let edgePicking = null;
-  let editUXLoad = null;
-
-  function ensureEditUX() {
-    if (editUX && edgePicking) return Promise.resolve({ editUX, edgePicking });
-    if (editUXLoad) return editUXLoad;
-
-    editUXLoad = Promise.all([
-      import('./runtime/edit-ux-pack.js'),
-      import('./runtime/edge-picking.js'),
-    ]).then(([uxModule, edgeModule]) => {
-      editUX = uxModule.installEditUXPack({ editor, editMode, transformModal });
-      edgePicking = edgeModule.installEdgePicking({ editor, editMode, knifeTool, boxSelect, circleSelect });
-      window.__gluestackEditUX = editUX;
-      window.__gluestackEdgePicking = edgePicking;
-      return { editUX, edgePicking };
-    }).catch((error) => {
-      editUXLoad = null;
-      console.error('[gluestack] Edit Mode UX failed to load', error);
-      editor.events.onStatus(`Edit UX: модуль не загрузился — ${error.message || error}`);
-      return null;
-    });
-
-    return editUXLoad;
-  }
-
-  // Every entry path (Tab, Modeling workspace, tutorial, external code) goes
-  // through editMode.enter(), so this is the single safe lazy-load boundary.
-  const baseEnterEditMode = editMode.enter.bind(editMode);
-  editMode.enter = (...args) => {
-    const entered = baseEnterEditMode(...args);
-    if (entered) queueMicrotask(() => { ensureEditUX(); });
-    return entered;
-  };
-
   const hud = document.querySelector('#transform-hud');
   const modalTools = new EditModalTools({
     editor,
@@ -78,9 +37,6 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
 
   document.addEventListener('click', (event) => {
     const actionButton = event.target.closest?.('[data-action]');
-    if (actionButton?.dataset.action === 'edit-knife' && editMode.active && editUX?.hiddenTriangles?.size) {
-      editUX.unhide();
-    }
     const type = actionToModal[actionButton?.dataset.action];
     if (type && editMode.active) {
       event.preventDefault();
@@ -102,9 +58,6 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
   window.__gluestackEditModalTools = modalTools;
   window.__gluestackUVModalTransform = uvModal;
   window.__gluestackVertexPicking = vertexPicking;
-  window.__gluestackEdgePicking = null;
-  window.__gluestackEditUX = null;
-  window.__gluestackEnsureEditUX = ensureEditUX;
 
   window.addEventListener('keydown', (event) => {
     if (window.__gluestackHome?.visible) return;
@@ -113,7 +66,7 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
     const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable;
     if (typing) return;
 
-    if (modalTools.active || uvModal.active || editUX?.slide?.active) return;
+    if (modalTools.active || uvModal.active) return;
 
     if (boxSelect?.active) {
       if (event.code === 'Escape') {
@@ -191,12 +144,7 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
       if (!commandKey && !event.altKey && event.code === 'KeyI') { event.preventDefault(); modalTools.begin('inset'); return; }
       if (event.code === 'KeyM') { event.preventDefault(); editMode.mergeSelected(); return; }
       if (event.code === 'KeyF') { event.preventDefault(); editMode.fillSelected(); return; }
-      if (event.code === 'KeyK') {
-        event.preventDefault();
-        if (editUX?.hiddenTriangles?.size) editUX.unhide();
-        knifeTool.begin();
-        return;
-      }
+      if (event.code === 'KeyK') { event.preventDefault(); knifeTool.begin(); return; }
       if (event.shiftKey && event.code === 'KeyN') { event.preventDefault(); editMode.recalculateNormals(); return; }
       if (event.code === 'KeyX' || event.code === 'Delete') { event.preventDefault(); editMode.deleteSelection(); return; }
       if (commandKey || event.altKey) return;
