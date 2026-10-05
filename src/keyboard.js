@@ -41,6 +41,9 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
 
   document.addEventListener('click', (event) => {
     const actionButton = event.target.closest?.('[data-action]');
+    if (actionButton?.dataset.action === 'edit-knife' && editMode.active && editUX?.hiddenTriangles?.size) {
+      editUX.unhide();
+    }
     const type = actionToModal[actionButton?.dataset.action];
     if (type && editMode.active) {
       event.preventDefault();
@@ -150,7 +153,12 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
       if (!commandKey && !event.altKey && event.code === 'KeyI') { event.preventDefault(); modalTools.begin('inset'); return; }
       if (event.code === 'KeyM') { event.preventDefault(); editMode.mergeSelected(); return; }
       if (event.code === 'KeyF') { event.preventDefault(); editMode.fillSelected(); return; }
-      if (event.code === 'KeyK') { event.preventDefault(); knifeTool.begin(); return; }
+      if (event.code === 'KeyK') {
+        event.preventDefault();
+        if (editUX?.hiddenTriangles?.size) editUX.unhide();
+        knifeTool.begin();
+        return;
+      }
       if (event.shiftKey && event.code === 'KeyN') { event.preventDefault(); editMode.recalculateNormals(); return; }
       if (event.code === 'KeyX' || event.code === 'Delete') { event.preventDefault(); editMode.deleteSelection(); return; }
       if (commandKey || event.altKey) return;
