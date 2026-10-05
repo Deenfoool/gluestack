@@ -1,8 +1,10 @@
 import * as THREE from 'three';
-import { cloneTriangle, edgeKey, rebuildMeshGeometry, syncLogicalPositions } from '../edit/topology.js';
-import { InteractionOverlay, circle, line } from './interaction-overlay.js';
+import { cloneTriangle, edgeKey, rebuildMeshGeometry } from '../edit/topology.js';
+import { EditSlideTool } from './edit-slide.js';
+import { refreshIcons } from '../ui.js';
 
 const DUPLICATE_EPSILON = 4e-5;
+const HIDDEN_EDIT_LAYER = 31;
 
 function language() {
   return window.__gluestackI18n?.getLanguage?.() === 'en' ? 'en' : 'ru';
@@ -53,7 +55,9 @@ function touchedTriangleIds(editMode) {
 function edgeGroups(editMode) {
   const map = new Map();
   for (const group of editMode.faceGroups) {
+    if ((group.triangles ?? []).every((index) => editMode.isTriangleHidden?.(index))) continue;
     for (const edge of group.boundary ?? []) {
+      if (editMode.isEdgeHidden?.(edge)) continue;
       if (!map.has(edge.key)) map.set(edge.key, new Set());
       map.get(edge.key).add(group.id);
     }
@@ -119,22 +123,20 @@ function makeVisualGeometry(editMode, hiddenTriangles) {
   const geometry = new THREE.BufferGeometry();
   const positions = [];
   const uvs = [];
-  const groups = [];
+  const runs = [];
   let currentMaterial = null;
-  let groupStart = 0;
+  let runStart = 0;
   let writtenTriangles = 0;
 
   editMode.triangles.forEach((triangle, triangleIndex) => {
     if (hiddenTriangles.has(triangleIndex)) return;
     const materialIndex = triangle.materialIndex ?? 0;
     if (currentMaterial !== materialIndex) {
-      if (currentMaterial !== null) groups.push({
-        start: groupStart,
-        count: writtenTriangles * 3 - groupStart,
-        materialIndex: currentMaterial,
-      });
+      if (currentMaterial !== null) {
+        runs.push({ start: runStart, count: writtenTriangles * 3 - runStart, materialIndex: currentMaterial });
+      }
       currentMaterial = materialIndex;
-      groupStart = writtenTriangles * 3;
+      runStart = writtenTriangles * 3;
     }
     triangle.v.forEach((vertexId, corner) => {
       const point = editMode.vertices[vertexId].position;
@@ -144,28 +146,27 @@ function makeVisualGeometry(editMode, hiddenTriangles) {
     });
     writtenTriangles += 1;
   });
-  if (currentMaterial !== null) groups.push({
-    start: groupStart,
-    count: writtenTriangles * 3 - groupStart,
-    materialIndex: currentMaterial,
-  });
 
+  if (currentMaterial !== null) {
+    runs.push({ start: runStart, count: writtenTriangles * 3 - runStart, materialIndex: currentMaterial });
+  }
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  groups.forEach((group) => geometry.addGroup(group.start, group.count, group.materialIndex));
-  geometry.computeVertexNormals();
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
+  runs.forEach((run) => geometry.addGroup(run.start, run.count, run.materialIndex));
+  if (positions.length) {
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+  }
   return geometry;
 }
 
-function cloneInvisibleMaterial(material) {
-  const clone = material?.clone?.() ?? new THREE.MeshBasicMaterial();
-  clone.transparent = true;
-  clone.opacity = 0;
-  clone.colorWrite = false;
-  clone.depthWrite = false;
-  return clone;
+function cloneUserData(value) {
+  try { return structuredClone(value ?? {}); }
+  catch {
+    try { return JSON.parse(JSON.stringify(value ?? {})); }
+    catch { return {}; }
+  }
 }
 
 function createSeparatedMesh(editMode, triangleIds, suffix) {
@@ -179,7 +180,12 @@ function createSeparatedMesh(editMode, triangleIds, suffix) {
   mesh.quaternion.copy(source.quaternion);
   mesh.scale.copy(source.scale);
   mesh.matrixAutoUpdate = source.matrixAutoUpdate;
-  mesh.userData = structuredClone(source.userData ?? {});
+  if (!source.matrixAutoUpdate) mesh.matrix.copy(source.matrix);
+  mesh.visible = source.visible;
+  mesh.renderOrder = source.renderOrder;
+  mesh.castShadow = source.castShadow;
+  mesh.receiveShadow = source.receiveShadow;
+  mesh.userData = cloneUserData(source.userData);
   delete mesh.userData.gluestackId;
   rebuildMeshGeometry(mesh, editMode.vertices, triangles, editMode.attributeState);
   (source.parent ?? editor.modelRoot).add(mesh);
@@ -218,251 +224,25 @@ function connectedTriangleComponents(editMode) {
   return components.sort((a, b) => b.size - a.size);
 }
 
-class EditSlideTool {
-  constructor({ editor, editMode }) {
-    this.editor = editor;
-    this.editMode = editMode;
-    this.overlay = new InteractionOverlay();
-    this.state = null;
-    this.lastPointer = null;
-    this.pending = null;
-    this.frame = 0;
-
-    window.addEventListener('pointermove', (event) => {
-      this.lastPointer = { x: event.clientX, y: event.clientY };
-      if (!this.state) return;
-      this.pending = event;
-      if (this.frame) return;
-      this.frame = requestAnimationFrame(() => {
-        this.frame = 0;
-        const pending = this.pending;
-        this.pending = null;
-        if (pending && this.state) this.update(pending);
-      });
-    }, { capture: true });
-
-    window.addEventListener('pointerdown', (event) => {
-      if (!this.state) return;
-      if (event.button === 0) this.commit();
-      else if (event.button === 2) this.cancel();
-      else return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }, { capture: true });
-
-    window.addEventListener('contextmenu', (event) => {
-      if (!this.state) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }, { capture: true });
-
-    window.addEventListener('keydown', (event) => {
-      if (!this.state) return;
-      if (event.key === 'Escape') this.cancel();
-      else if (event.key === 'Enter') this.commit();
-      else return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }, { capture: true });
-  }
-
-  get active() { return Boolean(this.state); }
-
-  project(point) {
-    const mesh = this.editMode.mesh;
-    mesh.updateWorldMatrix(true, false);
-    const ndc = point.clone().applyMatrix4(mesh.matrixWorld).project(this.editor.camera);
-    const rect = this.editor.renderer.domElement.getBoundingClientRect();
-    return {
-      x: rect.left + (ndc.x + 1) * 0.5 * rect.width,
-      y: rect.top + (1 - ndc.y) * 0.5 * rect.height,
-    };
-  }
-
-  begin(kind) {
-    const c = this.editMode;
-    if (!c.active || !c.mesh) return false;
-    if (kind === 'vertex' && (c.selectionMode !== 'vertex' || !c.selectedVertices.size)) {
-      status(c, 'Vertex Slide: выберите вершины', 'Vertex Slide: select vertices');
-      return false;
-    }
-    if (kind === 'edge' && (c.selectionMode !== 'edge' || !c.selectedEdges.size)) {
-      status(c, 'Edge Slide: выберите рёбра', 'Edge Slide: select edges');
-      return false;
-    }
-
-    const selectedIds = [...c.getSelectedVertexIds()];
-    const selectedSet = new Set(selectedIds);
-    const adjacency = new Map(selectedIds.map((id) => [id, []]));
-    for (const edge of c.logicalEdges) {
-      if (c.isEdgeHidden?.(edge)) continue;
-      if (selectedSet.has(edge.a) && !selectedSet.has(edge.b)) adjacency.get(edge.a).push(edge.b);
-      if (selectedSet.has(edge.b) && !selectedSet.has(edge.a)) adjacency.get(edge.b).push(edge.a);
-    }
-    if (![...adjacency.values()].some((items) => items.length)) {
-      status(c, 'Slide: у выделения нет доступных соседних рёбер', 'Slide: selection has no available neighboring edges');
-      return false;
-    }
-
-    const rect = this.editor.renderer.domElement.getBoundingClientRect();
-    const pointer = this.lastPointer ?? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-    const base = new Map(selectedIds.map((id) => [id, c.vertices[id].position.clone()]));
-    this.editor.beginHistory(kind === 'vertex' ? 'Vertex Slide' : 'Edge Slide');
-    const orbitEnabled = this.editor.orbit.enabled;
-    this.editor.orbit.enabled = false;
-    this.editor.transform.detach();
-    this.state = {
-      kind,
-      selectedIds,
-      adjacency,
-      base,
-      chosen: new Map(),
-      startX: pointer.x,
-      startY: pointer.y,
-      pointerX: pointer.x,
-      pointerY: pointer.y,
-      factor: 0,
-      orbitEnabled,
-    };
-    this.render();
-    status(c,
-      `${kind === 'vertex' ? 'Vertex' : 'Edge'} Slide · двигайте мышь · ЛКМ применить · ПКМ/Esc отменить`,
-      `${kind === 'vertex' ? 'Vertex' : 'Edge'} Slide · move mouse · LMB apply · RMB/Esc cancel`);
-    return true;
-  }
-
-  update(event) {
-    const s = this.state;
-    if (!s) return;
-    s.pointerX = event.clientX;
-    s.pointerY = event.clientY;
-    const precision = event.shiftKey ? 0.1 : 1;
-    const mx = (event.clientX - s.startX) * precision;
-    const my = (event.clientY - s.startY) * precision;
-    let factorSum = 0;
-    let factorCount = 0;
-    s.chosen.clear();
-
-    for (const id of s.selectedIds) {
-      const origin = s.base.get(id);
-      const originScreen = this.project(origin);
-      let best = null;
-      for (const neighborId of s.adjacency.get(id) ?? []) {
-        const target = this.editMode.vertices[neighborId]?.position;
-        if (!target) continue;
-        const targetScreen = this.project(target);
-        const ex = targetScreen.x - originScreen.x;
-        const ey = targetScreen.y - originScreen.y;
-        const lengthSq = ex * ex + ey * ey;
-        if (lengthSq < 1e-4) continue;
-        const projection = (mx * ex + my * ey) / lengthSq;
-        const score = Math.abs(projection);
-        if (!best || score > best.score) best = { neighborId, target, projection, score };
-      }
-      if (!best) continue;
-      let factor = Math.min(1, Math.max(0, Math.abs(best.projection)));
-      if (event.ctrlKey) factor = Math.round(factor * 10) / 10;
-      this.editMode.vertices[id].position.copy(origin).lerp(best.target, factor);
-      s.chosen.set(id, { targetId: best.neighborId, factor });
-      factorSum += factor;
-      factorCount += 1;
-    }
-
-    s.factor = factorCount ? factorSum / factorCount : 0;
-    syncLogicalPositions(this.editMode.mesh, this.editMode.vertices);
-    this.editMode.refreshOverlay();
-    this.editor.transform.detach();
-    this.render();
-  }
-
-  render() {
-    const s = this.state;
-    if (!s) return;
-    let svg = '';
-    for (const id of s.selectedIds.slice(0, 180)) {
-      const origin = s.base.get(id);
-      const current = this.editMode.vertices[id]?.position;
-      if (!origin || !current) continue;
-      const a = this.project(origin);
-      const b = this.project(current);
-      const chosen = s.chosen.get(id);
-      if (chosen) {
-        const target = this.editMode.vertices[chosen.targetId]?.position;
-        if (target) {
-          const t = this.project(target);
-          svg += line(a.x, a.y, t.x, t.y, { color: '#6cc7ff', opacity: 0.42, dash: '4 4' });
-        }
-      }
-      svg += circle(a.x, a.y, { radius: 4, color: '#bcbcbc', opacity: 0.65 });
-      svg += line(a.x, a.y, b.x, b.y, { color: '#f59b23', opacity: 0.82 });
-      svg += circle(b.x, b.y, { radius: 4.5, color: '#f59b23', fill: '#f59b23', opacity: 0.9 });
-    }
-    const en = language() === 'en';
-    this.overlay.show({
-      x: s.pointerX,
-      y: s.pointerY,
-      title: s.kind === 'vertex' ? 'Vertex Slide' : 'Edge Slide',
-      value: `${en ? 'Factor' : 'Коэффициент'} ${s.factor.toFixed(3)}`,
-      hint: en ? 'Shift precision · Ctrl snap · LMB apply · Esc cancel' : 'Shift точно · Ctrl шаг · ЛКМ применить · Esc отменить',
-      svg,
-    });
-  }
-
-  finishCommon() {
-    const s = this.state;
-    if (!s) return null;
-    this.state = null;
-    this.editor.orbit.enabled = s.orbitEnabled;
-    this.overlay.hide();
-    this.editMode.rebuildTopologyOnly();
-    this.editMode.refreshOverlay();
-    this.editMode.updatePivot();
-    this.editMode.emitChange();
-    return s;
-  }
-
-  commit() {
-    if (!this.state) return;
-    this.finishCommon();
-    this.editor.commitHistory();
-    status(this.editMode, 'Slide применён', 'Slide applied');
-  }
-
-  cancel() {
-    const s = this.state;
-    if (!s) return;
-    for (const [id, point] of s.base) if (this.editMode.vertices[id]) this.editMode.vertices[id].position.copy(point);
-    syncLogicalPositions(this.editMode.mesh, this.editMode.vertices);
-    this.finishCommon();
-    this.editor.cancelHistory();
-    status(this.editMode, 'Slide отменён', 'Slide cancelled');
-  }
-}
-
 export function installEditUXPack({ editor, editMode, transformModal = null }) {
   if (!editor || !editMode) return null;
   if (editMode.editUX) return editMode.editUX;
 
   const hiddenTriangles = new Set();
   let proxy = null;
-  let originalMaterial = null;
-  let invisibleMaterial = null;
-  const baseRefreshOverlay = editMode.refreshOverlay.bind(editMode);
+  let originalLayerMask = null;
   const baseRebuildMesh = editMode.rebuildMesh.bind(editMode);
   const baseExit = editMode.exit.bind(editMode);
   const baseSelectAll = editMode.selectAll.bind(editMode);
 
   function clearSurfaceMask() {
-    if (editMode.mesh && originalMaterial) editMode.mesh.material = originalMaterial;
-    originalMaterial = null;
+    if (editMode.mesh && originalLayerMask !== null) editMode.mesh.layers.mask = originalLayerMask;
+    originalLayerMask = null;
     if (proxy) {
       proxy.parent?.remove(proxy);
       proxy.geometry?.dispose?.();
       proxy = null;
     }
-    const items = Array.isArray(invisibleMaterial) ? invisibleMaterial : invisibleMaterial ? [invisibleMaterial] : [];
-    items.forEach((material) => material.dispose?.());
-    invisibleMaterial = null;
   }
 
   function refreshSurfaceMask() {
@@ -471,27 +251,28 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
       clearSurfaceMask();
       return;
     }
-    if (!originalMaterial) {
-      originalMaterial = mesh.material;
-      invisibleMaterial = Array.isArray(originalMaterial)
-        ? originalMaterial.map(cloneInvisibleMaterial)
-        : cloneInvisibleMaterial(originalMaterial);
-      mesh.material = invisibleMaterial;
-    }
+
+    if (originalLayerMask === null) originalLayerMask = mesh.layers.mask;
+    mesh.layers.set(HIDDEN_EDIT_LAYER);
+
     if (!proxy) {
-      proxy = new THREE.Mesh(new THREE.BufferGeometry(), originalMaterial);
-      proxy.name = '__gluestack_hidden_surface_proxy';
+      proxy = new THREE.Mesh(new THREE.BufferGeometry(), mesh.material);
+      proxy.name = '__gluestack_edit_visible_proxy';
       proxy.matrixAutoUpdate = false;
       proxy.raycast = () => {};
+      proxy.userData.__gluestackTransient = true;
       editor.scene.add(proxy);
     }
+
     proxy.geometry.dispose();
     proxy.geometry = makeVisualGeometry(editMode, hiddenTriangles);
-    proxy.material = originalMaterial;
+    proxy.material = mesh.material;
+    proxy.layers.mask = originalLayerMask;
+    proxy.visible = mesh.visible;
+    proxy.renderOrder = mesh.renderOrder;
     mesh.updateWorldMatrix(true, false);
     proxy.matrix.copy(mesh.matrixWorld);
     proxy.matrixWorld.copy(mesh.matrixWorld);
-    proxy.visible = true;
   }
 
   editMode.hiddenTriangles = hiddenTriangles;
@@ -509,6 +290,7 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
       : edgeOrKey;
     return Boolean(edge?.triangles?.length) && edge.triangles.every((index) => hiddenTriangles.has(index));
   };
+  editMode.editRaycastLayerMask = () => editMode.mesh?.layers?.mask ?? 1;
 
   editMode.refreshOverlay = function refreshOverlayWithHidden() {
     if (!this.active) return;
@@ -555,13 +337,15 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
     editMode.emitChange();
   };
 
-  function hideTriangles(ids, label) {
+  function hideTriangles(ids, labelRu, labelEn) {
     ids.forEach((id) => hiddenTriangles.add(id));
     editMode.clearComponentSelection();
     editMode.refreshOverlay();
     editMode.updatePivot();
     editMode.emitChange();
-    status(editMode, `${label} · скрыто ${hiddenTriangles.size} треугольников`, `${label} · ${hiddenTriangles.size} triangles hidden`);
+    status(editMode,
+      `${labelRu} · скрыто ${hiddenTriangles.size} треугольников`,
+      `${labelEn} · ${hiddenTriangles.size} triangles hidden`);
     return true;
   }
 
@@ -569,14 +353,16 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
     if (!editMode.active || !editMode.selectedCount()) return false;
     const ids = touchedTriangleIds(editMode);
     if (!ids.size) return false;
-    return hideTriangles(ids, language() === 'en' ? 'Hide Selected' : 'Скрыть выделенное');
+    return hideTriangles(ids, 'Скрыть выделенное', 'Hide Selected');
   }
 
   function hideUnselected() {
     if (!editMode.active || !editMode.selectedCount()) return false;
     const keep = touchedTriangleIds(editMode);
-    const ids = new Set(editMode.triangles.map((_, index) => index).filter((index) => !keep.has(index)));
-    return hideTriangles(ids, language() === 'en' ? 'Hide Unselected' : 'Скрыть невыделенное');
+    const ids = new Set(editMode.triangles
+      .map((_, index) => index)
+      .filter((index) => !keep.has(index) && !hiddenTriangles.has(index)));
+    return hideTriangles(ids, 'Скрыть невыделенное', 'Hide Unselected');
   }
 
   function unhide() {
@@ -584,6 +370,7 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
     hiddenTriangles.clear();
     clearSurfaceMask();
     editMode.refreshOverlay();
+    editMode.updatePivot();
     editMode.emitChange();
     status(editMode, 'Вся геометрия снова видима', 'All geometry is visible');
     return true;
@@ -607,35 +394,44 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
       status(editMode, 'Edge Loop: сначала выберите ребро', 'Edge Loop: select an edge first');
       return false;
     }
-    const seeds = [...editMode.selectedEdges];
+    const seeds = [...editMode.selectedEdges].filter((key) => !editMode.isEdgeHidden(key));
     editMode.selectedEdges.clear();
     seeds.forEach((key) => collectEdgeLoop(editMode, key).forEach((loopKey) => editMode.selectedEdges.add(loopKey)));
     editMode.refreshOverlay();
     editMode.updatePivot();
     editMode.emitChange();
     status(editMode, `Edge Loop · ${editMode.selectedEdges.size} рёбер`, `Edge Loop · ${editMode.selectedEdges.size} edges`);
-    return true;
+    return Boolean(editMode.selectedEdges.size);
   }
 
   function duplicateGeometry() {
     if (!editMode.active || !editMode.selectedCount()) return false;
     const chosen = selectedTriangleIds(editMode);
+    for (const hidden of hiddenTriangles) chosen.delete(hidden);
     if (!chosen.size) {
       status(editMode,
-        'Duplicate Geometry: выделение должно содержать целые грани',
-        'Duplicate Geometry: selection must contain complete faces');
+        'Duplicate Geometry: выделение должно содержать целые видимые грани',
+        'Duplicate Geometry: selection must contain complete visible faces');
       return false;
     }
+
     editor.checkpoint('Duplicate geometry');
     hiddenTriangles.clear();
     clearSurfaceMask();
 
-    const vertices = editMode.vertices.map((vertex) => ({ position: vertex.position.clone(), sources: [...(vertex.sources ?? [])] }));
+    const vertices = editMode.vertices.map((vertex) => ({
+      position: vertex.position.clone(),
+      sources: [...(vertex.sources ?? [])],
+    }));
     const used = new Set();
     chosen.forEach((triangleIndex) => editMode.triangles[triangleIndex].v.forEach((id) => used.add(id)));
     const duplicate = new Map();
     const worldRight = new THREE.Vector3(1, 0, 0).applyQuaternion(editor.camera.quaternion).normalize();
-    const localRight = worldRight.transformDirection(editMode.mesh.matrixWorld.clone().invert()).normalize().multiplyScalar(DUPLICATE_EPSILON);
+    const localRight = worldRight
+      .transformDirection(editMode.mesh.matrixWorld.clone().invert())
+      .normalize()
+      .multiplyScalar(DUPLICATE_EPSILON);
+
     for (const id of used) {
       duplicate.set(id, vertices.length);
       vertices.push({ position: editMode.vertices[id].position.clone().add(localRight), sources: [] });
@@ -648,6 +444,7 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
       triangle.v = triangle.v.map((id) => duplicate.get(id));
       triangles.push(triangle);
     }
+
     editMode.vertices = vertices;
     editMode.rebuildMesh(triangles);
     editMode.selectionMode = 'face';
@@ -666,15 +463,19 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
 
   function separateSelection() {
     const chosen = selectedTriangleIds(editMode);
+    for (const hidden of hiddenTriangles) chosen.delete(hidden);
     if (!chosen.size) {
-      status(editMode, 'Separate Selection: выберите целые грани', 'Separate Selection: select complete faces');
+      status(editMode, 'Separate Selection: выберите целые видимые грани', 'Separate Selection: select complete visible faces');
       return false;
     }
     if (chosen.size >= editMode.triangles.length) {
       status(editMode, 'Separate Selection: нельзя отделить всю геометрию', 'Separate Selection: cannot separate the entire mesh');
       return false;
     }
+
     editor.checkpoint('Separate selection');
+    hiddenTriangles.clear();
+    clearSurfaceMask();
     createSeparatedMesh(editMode, chosen, 'Selection');
     const remain = editMode.triangles.filter((_, index) => !chosen.has(index)).map(cloneTriangle);
     editMode.rebuildMesh(remain);
@@ -684,6 +485,8 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
   }
 
   function separateByMaterial() {
+    hiddenTriangles.clear();
+    clearSurfaceMask();
     const groups = new Map();
     editMode.triangles.forEach((triangle, index) => {
       const material = triangle.materialIndex ?? 0;
@@ -695,34 +498,41 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
       status(editMode, 'Separate by Material: у mesh только один material slot', 'Separate by Material: mesh uses only one material slot');
       return false;
     }
+
     editor.checkpoint('Separate by material');
     const [, keep] = parts[0];
     for (const [material, ids] of parts.slice(1)) createSeparatedMesh(editMode, ids, `Material_${material}`);
     const remain = [...keep].sort((a, b) => a - b).map((id) => cloneTriangle(editMode.triangles[id]));
     editMode.rebuildMesh(remain);
     editor.events.onStructure();
-    status(editMode, `Separate by Material · объектов создано: ${parts.length - 1}`, `Separate by Material · created objects: ${parts.length - 1}`);
+    status(editMode,
+      `Separate by Material · объектов создано: ${parts.length - 1}`,
+      `Separate by Material · created objects: ${parts.length - 1}`);
     return true;
   }
 
   function separateLooseParts() {
+    hiddenTriangles.clear();
+    clearSurfaceMask();
     const components = connectedTriangleComponents(editMode);
     if (components.length < 2) {
       status(editMode, 'Separate Loose Parts: mesh уже связный', 'Separate Loose Parts: mesh is already connected');
       return false;
     }
+
     editor.checkpoint('Separate loose parts');
     const keep = components[0];
     components.slice(1).forEach((ids, index) => createSeparatedMesh(editMode, ids, `Part_${index + 2}`));
     const remain = [...keep].sort((a, b) => a - b).map((id) => cloneTriangle(editMode.triangles[id]));
     editMode.rebuildMesh(remain);
     editor.events.onStructure();
-    status(editMode, `Separate Loose Parts · объектов создано: ${components.length - 1}`, `Separate Loose Parts · created objects: ${components.length - 1}`);
+    status(editMode,
+      `Separate Loose Parts · объектов создано: ${components.length - 1}`,
+      `Separate Loose Parts · created objects: ${components.length - 1}`);
     return true;
   }
 
   const slide = new EditSlideTool({ editor, editMode });
-
   const api = {
     hiddenTriangles,
     hideSelected,
@@ -743,7 +553,7 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
 
   function menuLabel(key) {
     const en = language() === 'en';
-    const labels = {
+    return {
       loop: en ? 'Select Edge Loop' : 'Выбрать Edge Loop',
       hide: en ? 'Hide Selected' : 'Скрыть выделенное',
       hideOther: en ? 'Hide Unselected' : 'Скрыть невыделенное',
@@ -754,8 +564,7 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
       separateSelection: en ? 'Separate · Selection' : 'Отделить · Выделение',
       separateMaterial: en ? 'Separate · By Material' : 'Отделить · По материалу',
       separateLoose: en ? 'Separate · Loose Parts' : 'Отделить · Несвязанные части',
-    };
-    return labels[key];
+    }[key];
   }
 
   function mountMenu() {
@@ -779,8 +588,8 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
       <button type="button" data-edit-ux="separateMaterial"><i data-lucide="layers"></i><span>${menuLabel('separateMaterial')}</span></button>
       <button type="button" data-edit-ux="separateLoose"><i data-lucide="boxes"></i><span>${menuLabel('separateLoose')}</span></button>`;
     host.appendChild(block);
+    refreshIcons();
     window.__gluestackIcons8Tools?.scan?.();
-    window.lucide?.createIcons?.();
   }
 
   function runAction(name) {
@@ -797,8 +606,7 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
       separateMaterial: separateByMaterial,
       separateLoose: separateLooseParts,
     };
-    const fn = actions[name];
-    return fn ? fn() : false;
+    return actions[name]?.() ?? false;
   }
 
   document.addEventListener('click', (event) => {
@@ -828,7 +636,8 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
     event.stopImmediatePropagation();
   }, { capture: true });
 
-  // When hidden geometry exists, filter Face Select ray hits against the hidden set.
+  // Hidden components use a viewport-only proxy. Raycast the real mesh on its
+  // temporary edit layer, then discard hits that belong to hidden triangles.
   editor.renderer.domElement.addEventListener('pointerup', (event) => {
     if (!editMode.active || editMode.selectionMode !== 'face' || !hiddenTriangles.size || editor.transform.dragging) return;
     if (!editor.pointerStart) return;
@@ -839,10 +648,13 @@ export function installEditUXPack({ editor, editMode, transformModal = null }) {
     editor.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     editor.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     editor.raycaster.setFromCamera(editor.pointer, editor.camera);
+    const previousMask = editor.raycaster.layers.mask;
+    editor.raycaster.layers.mask = editMode.mesh.layers.mask;
     const hit = editor.raycaster.intersectObject(editMode.mesh, false).find((item) => {
       const internal = editMode.sourceFaceToTriangle[item.faceIndex];
       return internal >= 0 && !hiddenTriangles.has(internal);
     });
+    editor.raycaster.layers.mask = previousMask;
     const internal = hit ? editMode.sourceFaceToTriangle[hit.faceIndex] : -1;
     const group = internal >= 0 ? editMode.triangleToFaceGroup[internal] : null;
     editor.pointerStart = null;
