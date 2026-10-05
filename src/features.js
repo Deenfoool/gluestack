@@ -39,6 +39,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
 
   const materials = await loadAndInstall(editor, 'Materials', () => import('./materials/integration.js'), ({ installMaterialPanel }) => installMaterialPanel({ editor }));
   const projects = await loadAndInstall(editor, 'Projects', () => import('./projects/integration.js'), ({ installProjects }) => installProjects({ editor, editMode, knifeTool }));
+  const settings = await loadAndInstall(editor, 'Settings', () => import('./runtime/settings.js'), ({ installSettings }) => installSettings({ editor, projects }));
   const gameReady = await loadAndInstall(editor, 'Game Ready', () => import('./game-ready/integration.js'), ({ installGameReady }) => installGameReady({ editor }));
   const gameReadyValidator = await loadAndInstall(editor, 'Game Ready validator v2', () => import('./game-ready/validator-v2.js'), ({ installGameReadyValidatorV2 }) => installGameReadyValidatorV2({ editor, gameReady }));
   const lodPolicy = await loadAndInstall(editor, 'LOD policy', () => import('./game-ready/lod-policy.js'), ({ installLODPolicy }) => installLODPolicy({ editor, gameReady }));
@@ -69,7 +70,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
 
   const installed = {
     uv, advancedUV, smartIslands, harmonicUnwrap, uvRelax, uvIslandTools,
-    materials, projects, gameReady, gameReadyValidator, lodPolicy, optimizerV2, exportProfiles, cleanupAudit,
+    materials, projects, settings, gameReady, gameReadyValidator, lodPolicy, optimizerV2, exportProfiles, cleanupAudit,
     paint, procedural, scene, hardening, resources, transformIntegrity, importer, integrity,
     viewportHistory, animations, animationEditor, dopeSheet, modifierStack, metadataPolicy, cleanExport, exportSelected,
   };
