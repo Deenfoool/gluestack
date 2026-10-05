@@ -35,6 +35,10 @@ function sceneScale(mesh) {
   return Math.max(size / 260, 0.003);
 }
 
+function language() {
+  return window.__gluestackI18n?.getLanguage?.() === 'en' ? 'en' : 'ru';
+}
+
 export class EditModalTools {
   constructor({ editor, editMode, hud, status, transformModal = null, knifeTool = null }) {
     this.editor = editor;
@@ -45,6 +49,7 @@ export class EditModalTools {
     this.knifeTool = knifeTool;
     this.state = null;
     this.lastPointer = null;
+    this.suppressClick = false;
 
     window.addEventListener('pointermove', (event) => {
       this.lastPointer = { x: event.clientX, y: event.clientY };
@@ -54,26 +59,39 @@ export class EditModalTools {
 
     window.addEventListener('pointerdown', (event) => {
       if (!this.state) return;
+      const viewportClick = Boolean(event.target.closest?.('#viewport'));
       if (event.button === 0) {
         event.preventDefault();
         event.stopImmediatePropagation();
+        this.suppressClick = viewportClick;
         this.commit();
       } else if (event.button === 2) {
         event.preventDefault();
         event.stopImmediatePropagation();
+        this.suppressClick = viewportClick;
         this.cancel();
       }
     }, { capture: true });
 
-    window.addEventListener('contextmenu', (event) => {
-      if (!this.state) return;
+    window.addEventListener('click', (event) => {
+      if (!this.suppressClick) return;
+      this.suppressClick = false;
       event.preventDefault();
       event.stopImmediatePropagation();
     }, { capture: true });
 
+    window.addEventListener('contextmenu', (event) => {
+      if (!this.state && !this.suppressClick) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.suppressClick = false;
+    }, { capture: true });
+
     window.addEventListener('keydown', (event) => {
       if (!this.state) return;
-      if (this.handleKey(event)) {
+      const wasActive = true;
+      const handled = this.handleKey(event);
+      if (handled || wasActive) {
         event.preventDefault();
         event.stopImmediatePropagation();
       }
@@ -84,20 +102,22 @@ export class EditModalTools {
 
   preflight(type) {
     const c = this.editMode;
+    const en = language() === 'en';
     if (!c.active || !c.mesh) {
-      this.status('Инструмент доступен только в Edit Mode');
+      this.status(en ? 'This tool is available only in Edit Mode' : 'Инструмент доступен только в Edit Mode');
       return false;
     }
     if (type === 'extrude' && (c.selectionMode !== 'face' || !c.selectedFaces.size)) {
-      this.status('Extrude: выберите одну или несколько граней');
+      this.status(en ? 'Extrude: select one or more faces' : 'Extrude: выберите одну или несколько граней');
       return false;
     }
     if ((type === 'inset' || type === 'bevel') && (c.selectionMode !== 'face' || c.selectedFaces.size !== 1)) {
-      this.status(`${type === 'inset' ? 'Inset' : 'Bevel'}: выберите одну грань`);
+      const name = type === 'inset' ? 'Inset' : 'Bevel';
+      this.status(en ? `${name}: select one face` : `${name}: выберите одну грань`);
       return false;
     }
     if (type === 'loopCut' && (c.selectionMode !== 'edge' || c.selectedEdges.size !== 1)) {
-      this.status('Loop Cut: выберите одно ребро quad-strip');
+      this.status(en ? 'Loop Cut: select one edge of a quad strip' : 'Loop Cut: выберите одно ребро quad-strip');
       return false;
     }
     return true;
@@ -139,7 +159,9 @@ export class EditModalTools {
       numeric: '',
     };
     this.renderHud();
-    this.status(`${this.label()} · двигайте мышь · ЛКМ/Enter применить · ПКМ/Esc отменить`);
+    this.status(language() === 'en'
+      ? `${this.label()} · move the mouse · LMB/Enter apply · RMB/Esc cancel`
+      : `${this.label()} · двигайте мышь · ЛКМ/Enter применить · ПКМ/Esc отменить`);
     return true;
   }
 
@@ -180,8 +202,7 @@ export class EditModalTools {
   applyPreview() {
     const s = this.state;
     if (!s || !this.restoreBase()) return false;
-    let ok = false;
-    ok = this.runSilent(() => {
+    const ok = this.runSilent(() => {
       if (s.type === 'extrude') return this.editMode.extrude(s.values.distance);
       if (s.type === 'inset') return this.editMode.inset(s.values.factor);
       if (s.type === 'bevel') return bevelFace(this.editMode, s.values.factor, s.values.depth);
@@ -265,7 +286,10 @@ export class EditModalTools {
     if (s.type === 'extrude') value = `${s.values.distance.toFixed(3)}`;
     else if (s.type === 'inset' || s.type === 'loopCut') value = `${s.values.factor.toFixed(3)}`;
     else value = `factor ${s.values.factor.toFixed(3)} · depth ${s.values.depth.toFixed(3)}`;
-    this.hud.textContent = `${this.label()} · ${value} · ЛКМ/Enter ✓ · ПКМ/Esc ✕ · Shift точно · Ctrl шаг`;
+    const hint = language() === 'en'
+      ? 'LMB/Enter ✓ · RMB/Esc ✕ · Shift precision · Ctrl snap'
+      : 'ЛКМ/Enter ✓ · ПКМ/Esc ✕ · Shift точно · Ctrl шаг';
+    this.hud.textContent = `${this.label()} · ${value} · ${hint}`;
     this.hud.hidden = false;
   }
 
@@ -284,8 +308,13 @@ export class EditModalTools {
     this.editor.events.onStructure();
     this.editMode.emitChange();
     this.editMode.updatePivot();
-    this.status(`${TYPES[s.type].label}: применено`);
+    this.status(language() === 'en' ? `${TYPES[s.type].label}: applied` : `${this.labelFor(s.type)}: применено`);
     return true;
+  }
+
+  labelFor(type) {
+    const raw = TYPES[type]?.label ?? 'Tool';
+    return window.__gluestackI18n?.t?.(raw) ?? raw;
   }
 
   cancel() {
@@ -299,7 +328,7 @@ export class EditModalTools {
     this.editor.cancelHistory();
     this.editMode.refreshOverlay();
     this.editMode.updatePivot();
-    this.status(`${TYPES[s.type].label}: отменено`);
+    this.status(language() === 'en' ? `${TYPES[s.type].label}: cancelled` : `${this.labelFor(s.type)}: отменено`);
     return true;
   }
 }
