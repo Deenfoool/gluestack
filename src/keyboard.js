@@ -1,7 +1,6 @@
 import { bevelFace } from './edit/bevel.js';
 import { dissolveSelected } from './edit/dissolve.js';
 import { loopCut } from './edit/cuts.js';
-import { installFeatures } from './features.js';
 import { installSelectionTools } from './runtime/selection-tools.js';
 import { installBoxSelect } from './runtime/box-select.js';
 import { installCircleSelect } from './runtime/circle-select.js';
@@ -12,7 +11,6 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
   const boxSelect = installBoxSelect({ editor, editMode });
   const circleSelect = installCircleSelect({ editor, editMode });
   const advancedSelection = installAdvancedEditSelection({ editMode });
-  installFeatures({ editor, editMode, knifeTool, requestNumber });
 
   window.addEventListener('keydown', (event) => {
     const target = event.target;
