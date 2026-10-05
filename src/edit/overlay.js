@@ -65,7 +65,8 @@ export class EditOverlay {
       size: selectionMode === 'vertex' ? 9 : 5,
       sizeAttenuation: false,
       vertexColors: true,
-      depthTest: false,
+      depthTest: true,
+      depthWrite: false,
     }));
     this.points.renderOrder = 102;
     this.group.add(this.points);
