@@ -52,6 +52,7 @@ export function installVertexPicking({ editor, editMode, knifeTool = null, boxSe
       || circleSelect?.active
       || window.__gluestackEditModalTools?.active
       || window.__gluestackUVModalTransform?.active
+      || editMode.editUX?.slide?.active
       || window.__gluestackHome?.visible;
   }
 
@@ -76,7 +77,10 @@ export function installVertexPicking({ editor, editMode, knifeTool = null, boxSe
     if (!mesh) return false;
     const camera = editor.camera;
     visibilityRaycaster.setFromCamera(new THREE.Vector2(candidate.ndcX, candidate.ndcY), camera);
-    const first = visibilityRaycaster.intersectObject(mesh, false)[0];
+    const first = visibilityRaycaster.intersectObject(mesh, false).find((hit) => {
+      const internal = editMode.sourceFaceToTriangle?.[hit.faceIndex] ?? -1;
+      return internal < 0 || !editMode.isTriangleHidden?.(internal);
+    });
     if (!first) return true;
     const candidateDistance = camera.position.distanceTo(candidate.world);
     const tolerance = Math.max(0.002, candidateDistance * 0.0015);
@@ -94,6 +98,7 @@ export function installVertexPicking({ editor, editMode, knifeTool = null, boxSe
     const radiusSq = PICK_RADIUS_PX * PICK_RADIUS_PX;
 
     for (let index = 0; index < editMode.vertices.length; index += 1) {
+      if (editMode.isVertexHidden?.(index)) continue;
       const vertex = editMode.vertices[index];
       world.copy(vertex.position).applyMatrix4(mesh.matrixWorld);
       ndc.copy(world).project(editor.camera);
@@ -165,12 +170,17 @@ export function installVertexPicking({ editor, editMode, knifeTool = null, boxSe
   canvas.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || blocked()) return;
     const candidate = pick(event.clientX, event.clientY);
+    if (!candidate && editor.transform.axis) return;
     backgroundPress = {
       x: event.clientX,
       y: event.clientY,
       additive: event.shiftKey,
     };
-    if (!candidate) return;
+    if (!candidate) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
 
     pressed = {
       index: candidate.index,
@@ -207,7 +217,7 @@ export function installVertexPicking({ editor, editMode, knifeTool = null, boxSe
     const active = backgroundPress;
     backgroundPress = null;
     const distance = Math.hypot(event.clientX - active.x, event.clientY - active.y);
-    if (distance > CLICK_SLOP_PX || blocked() || editor.transform.axis) return;
+    if (distance > CLICK_SLOP_PX || blocked()) return;
 
     event.preventDefault();
     event.stopImmediatePropagation();
