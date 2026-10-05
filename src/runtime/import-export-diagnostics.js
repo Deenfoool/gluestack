@@ -56,6 +56,8 @@ async function cameraLightRoundTrip() {
   const directional = new THREE.DirectionalLight(0xffddbb, 1.2);
   directional.name = 'FixtureDirectional';
   directional.position.set(-3, 5, 2);
+  directional.target.position.set(0, 0, -1);
+  directional.add(directional.target);
   root.add(directional);
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial());
   root.add(mesh);
@@ -67,8 +69,15 @@ async function cameraLightRoundTrip() {
       if (object.isCamera) cameras += 1;
       if (object.isLight) lights += 1;
     });
+    const loadedCamera = parsed.scene.getObjectByName('FixtureCamera');
+    const loadedPoint = parsed.scene.getObjectByName('FixturePoint');
+    const loadedDirectional = parsed.scene.getObjectByName('FixtureDirectional');
+    const close = (a, b) => Number.isFinite(a) && Math.abs(a - b) < 1e-5;
+    const properties = close(loadedCamera?.fov, camera.fov) && close(loadedCamera?.near, camera.near)
+      && close(loadedCamera?.far, camera.far) && close(loadedPoint?.intensity, point.intensity)
+      && close(loadedPoint?.distance, point.distance) && close(loadedDirectional?.intensity, directional.intensity);
     disposeRoot(parsed.scene);
-    return result('Camera + punctual lights round-trip', cameras === 1 && lights === 2, `camera ${cameras}/1 · lights ${lights}/2`);
+    return result('Camera + punctual lights round-trip', cameras === 1 && lights === 2 && properties, `camera ${cameras}/1 · lights ${lights}/2 · projection/intensity/range ${properties ? 'PASS' : 'FAIL'}`);
   } catch (error) {
     return result('Camera + punctual lights round-trip', false, error.message || String(error));
   } finally {

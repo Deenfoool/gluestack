@@ -399,14 +399,14 @@ Fixture-набор создан в `tests/fixtures/`; реальный PASS ос
 
 # P1 — Import / Export compatibility
 
-- [ ] Multiple glTF scenes policy.
-- [ ] Camera/punctual light golden test.
-- [ ] SkinnedMesh round-trip test.
-- [ ] Morph round-trip test.
-- [ ] Tangent / vertex color / UV1+ fixtures.
-- [ ] Data URI resources.
-- [ ] Sidecar duplicate-filename conflict resolver.
-- [ ] Unsupported glTF extensions warning.
+- [x] Multiple glTF scenes policy: default scene + явное предупреждение, Node Diagnostics regression.
+- [x] Camera/punctual light golden test: projection/intensity/range, Node Diagnostics PASS.
+- [x] SkinnedMesh GLB round-trip с bone animation; Node regression.
+- [x] Morph GLB round-trip с weights animation; Node regression.
+- [x] Tangent / vertex color / UV1 fixtures: Node Diagnostics PASS.
+- [x] Data URI resources: Node Diagnostics PASS.
+- [x] Sidecar duplicate-filename conflict resolver: относительные пути до basename, отказ при неоднозначности, изоляция параллельных импортов.
+- [x] Unsupported extensions: отказ для неизвестных required, предупреждение для optional; [политика v1](./docs/IMPORT_EXPORT.md).
 - [ ] Draco policy.
 - [ ] KTX2/Basis strategy.
 - [ ] Meshopt strategy.

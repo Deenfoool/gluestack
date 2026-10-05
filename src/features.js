@@ -26,28 +26,21 @@ function installProjectDelete(projects) {
   };
 }
 
-function makeHomeImporter({ editor, projects, importer }) {
+export function makeHomeImporter({ projects, importer, ensureReady = () => window.__gluestackLoadEditorFeatures?.() }) {
   if (!importer?.importFiles) return importer;
   return {
     ...importer,
     importFiles: async (files) => {
+      // Register animation/history support before importing from Home. The
+      // transaction itself belongs to the common import pipeline.
+      await ensureReady();
       const previousLoading = projects.isLoading;
       projects.isLoading = true;
       try {
-        editor.clearSelection();
-        for (const child of [...editor.modelRoot.children]) {
-          editor.modelRoot.remove(child);
-          editor.disposeObjectResources(child);
-        }
-        editor.registerAnimations?.([], { replace: true });
-        editor.cancelHistory?.();
-        editor.clearHistoryStack?.(editor.undoStack);
-        editor.clearHistoryStack?.(editor.redoStack);
-        editor.emitHistory?.();
+        return await importer.importFiles(files, { replace: true });
       } finally {
         projects.isLoading = previousLoading;
       }
-      return importer.importFiles(files);
     },
   };
 }
@@ -210,7 +203,7 @@ async function installFeaturesOnce({ editor, editMode, knifeTool }) {
   const projects = await loadAndInstall(editor, 'Projects', () => import('./projects/integration.js'), ({ installProjects }) => installProjects({ editor, editMode, knifeTool }));
   const settings = await loadAndInstall(editor, 'Settings', () => import('./runtime/settings.js'), ({ installSettings }) => installSettings({ editor, projects, i18n }));
   installProjectDelete(projects);
-  const homeImporter = makeHomeImporter({ editor, projects, importer });
+  const homeImporter = makeHomeImporter({ projects, importer });
   const home = await loadAndInstall(editor, 'Home', () => import('./runtime/home.js'), ({ installHome }) => installHome({
     editor,
     projects,

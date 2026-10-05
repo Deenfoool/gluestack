@@ -14,7 +14,7 @@ function uniqueClipName(existing, base = 'Animation') {
 }
 
 function cloneClips(clips = []) {
-  return clips.filter((clip) => clip?.isAnimationClip).map((clip) => clip.clone());
+  return clips.filter((clip) => clip instanceof THREE.AnimationClip).map((clip) => clip.clone());
 }
 
 function trackTargetsName(trackName, name) {
@@ -125,7 +125,7 @@ export function installAnimations(editor) {
   editor.registerAnimations = (clips = [], { replace = false } = {}) => {
     const next = replace ? [] : [...editor.animations];
     for (const source of clips) {
-      if (!source?.isAnimationClip) continue;
+      if (!(source instanceof THREE.AnimationClip)) continue;
       const clip = source.clone();
       clip.name = uniqueClipName(next, clip.name || 'Animation');
       next.push(clip);
