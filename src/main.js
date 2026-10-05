@@ -5,9 +5,7 @@ import { ModifierController } from './modifiers/controller.js';
 import { bindModifierControls } from './modifiers/ui-bindings.js';
 import { TransformModal } from './transform-modal.js';
 import { bindKeyboard } from './keyboard.js';
-import { bevelFace } from './edit/bevel.js';
 import { dissolveSelected } from './edit/dissolve.js';
-import { loopCut } from './edit/cuts.js';
 import {
   refreshIcons,
   renderHistory,
@@ -121,19 +119,6 @@ const transformModal = new TransformModal(
 
 function closeMenus() { $$('.menu[open]').forEach((menu) => menu.removeAttribute('open')); }
 
-function requestNumber(label, defaultValue, options = {}) {
-  const raw = window.prompt(label, String(defaultValue));
-  if (raw === null) return null;
-  const value = Number(String(raw).replace(',', '.'));
-  if (!Number.isFinite(value)) {
-    setStatus('Нужно ввести число');
-    return null;
-  }
-  if (options.min !== undefined && value < options.min) return null;
-  if (options.max !== undefined && value > options.max) return null;
-  return value;
-}
-
 window.__gluestackEditor = editor;
 window.__gluestackFeatures = {};
 window.__gluestackFeatureBootstrapError = null;
@@ -141,7 +126,7 @@ window.__gluestackFeatureBootstrapError = null;
 async function bootstrapOptionalFeatures() {
   try {
     const { installFeatures } = await import('./features.js');
-    const features = await installFeatures({ editor, editMode, knifeTool, requestNumber }) ?? {};
+    const features = await installFeatures({ editor, editMode, knifeTool }) ?? {};
     window.__gluestackFeatures = features;
     window.__gluestackFeatureBootstrapError = null;
     scheduleRefresh();
@@ -177,9 +162,6 @@ function restoreSelectedTransform(snapshot) {
 }
 
 function setTransformMode(mode) {
-  // Switching tools is UI state, not a scene edit. Preserve the complete current
-  // object transform around the switch so Rotate can never reset Scale, Scale can
-  // never reset Rotation, and Move can never reset either one.
   if (editor.transform.dragging && typeof editor.transform.pointerUp === 'function') {
     editor.transform.pointerUp(null);
   }
@@ -187,8 +169,6 @@ function setTransformMode(mode) {
   editor.setTransformMode(mode);
   restoreSelectedTransform(snapshot);
 
-  // Some TransformControls/UI listeners complete after the click handler. Re-assert
-  // the exact same transform once after the current task and once on the next frame.
   if (snapshot) {
     queueMicrotask(() => restoreSelectedTransform(snapshot));
     requestAnimationFrame(() => restoreSelectedTransform(snapshot));
@@ -234,28 +214,6 @@ function runEditAction(action) {
     case 'edit-knife': knifeTool.begin(); return true;
     case 'edit-recalculate-normals': editMode.recalculateNormals(); return true;
     case 'edit-flip-normals': editMode.flipNormals(); return true;
-    case 'edit-extrude': {
-      const value = requestNumber('Extrude distance', 0.25);
-      if (value !== null) editMode.extrude(value);
-      return true;
-    }
-    case 'edit-inset': {
-      const value = requestNumber('Inset factor (0..1)', 0.2, { min: 0.001, max: 0.999 });
-      if (value !== null) editMode.inset(value);
-      return true;
-    }
-    case 'edit-bevel': {
-      const factor = requestNumber('Bevel factor (0..0.5)', 0.12, { min: 0.001, max: 0.499 });
-      if (factor === null) return true;
-      const depth = requestNumber('Bevel depth', 0.08);
-      if (depth !== null) bevelFace(editMode, factor, depth);
-      return true;
-    }
-    case 'edit-loop-cut': {
-      const factor = requestNumber('Loop Cut factor (0..1)', 0.5, { min: 0.001, max: 0.999 });
-      if (factor !== null) loopCut(editMode, factor);
-      return true;
-    }
     default: return false;
   }
 }
@@ -358,7 +316,6 @@ bindKeyboard({
   knifeTool,
   transformModal,
   snapButton,
-  requestNumber,
   openAddMenu: () => $('#add-menu').setAttribute('open', ''),
 });
 
