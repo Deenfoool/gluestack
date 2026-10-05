@@ -23,6 +23,8 @@ const RU = Object.freeze({
   'Settings…': 'Настройки…',
   'Undo': 'Отменить',
   'Redo': 'Повторить',
+  'Undo (Ctrl+Z)': 'Отменить (Ctrl+Z)',
+  'Redo (Ctrl+Shift+Z)': 'Повторить (Ctrl+Shift+Z)',
   'Import': 'Импорт',
   'Export': 'Экспорт',
   'Reset': 'Сбросить',
@@ -67,18 +69,37 @@ const RU = Object.freeze({
   'Move': 'Перемещение',
   'Rotate': 'Вращение',
   'Scale': 'Масштаб',
+  'Move (G)': 'Перемещение (G)',
+  'Rotate (R)': 'Вращение (R)',
+  'Scale (S)': 'Масштаб (S)',
+  'Duplicate (Shift+D)': 'Дублировать (Shift+D)',
   'Snap': 'Привязка',
+  'Snap (Shift+Tab)': 'Привязка (Shift+Tab)',
+  'Delete (X)': 'Удалить (X)',
+  'Extrude Faces (E)': 'Экструдировать грани (E)',
+  'Inset Face (I)': 'Вставка грани (I)',
+  'Bevel Face (Ctrl+B)': 'Фаска грани (Ctrl+B)',
+  'Loop Cut (Ctrl+R)': 'Кольцевой разрез (Ctrl+R)',
+  'Knife (K)': 'Нож (K)',
+  'Merge at Center (M)': 'Объединить в центре (M)',
+  'Dissolve Vertex / Edge (Ctrl+X)': 'Растворить вершину / ребро (Ctrl+X)',
+  'Fill Edge Loop (F)': 'Заполнить контур (F)',
+  'Delete Selected (X)': 'Удалить выбранное (X)',
   'Object Mode': 'Режим объекта',
   'Edit Mode': 'Режим редактирования',
   'Vertex Select': 'Выбор вершин',
   'Edge Select': 'Выбор рёбер',
   'Face Select': 'Выбор граней',
+  'Vertex Select (1)': 'Выбор вершин (1)',
+  'Edge Select (2)': 'Выбор рёбер (2)',
+  'Face Select (3)': 'Выбор граней (3)',
   'Frame Selected': 'Показать выбранное',
   'Frame All': 'Показать всё',
   'Solid': 'Сплошной режим',
   'Material Preview': 'Предпросмотр материала',
   'Material Preview — по roadmap': 'Предпросмотр материала — по roadmap',
   'Toggle Object/Edit Mode': 'Переключить Object/Edit Mode',
+  'Toggle Object/Edit Mode (Tab)': 'Переключить Object/Edit Mode (Tab)',
   'Shift+Click multi-select · MMB orbit · Shift+MMB pan · Wheel zoom': 'Shift+клик — мультивыбор · СКМ — вращение · Shift+СКМ — панорама · Колесо — масштаб',
   '1/2/3 Select · Ctrl+B Bevel · Ctrl+R Loop Cut · K Knife · Ctrl+X Dissolve': '1/2/3 — выбор · Ctrl+B — фаска · Ctrl+R — разрез · K — нож · Ctrl+X — растворить',
 
@@ -91,6 +112,9 @@ const RU = Object.freeze({
   'Scene Collection': 'Коллекция сцены',
   'New Collection': 'Новая коллекция',
   'Outliner': 'Структура сцены',
+  'Toolbar': 'Панель инструментов',
+  'Workspaces': 'Рабочие области',
+  'History': 'История',
   'Properties tabs': 'Вкладки свойств',
   'Properties': 'Свойства',
   'Name': 'Имя',
@@ -100,6 +124,7 @@ const RU = Object.freeze({
   'Modifiers': 'Модификаторы',
   'Material': 'Материал',
   'Material — по roadmap': 'Материал — по roadmap',
+  'Select an object': 'Выберите объект',
   'Выберите объект': 'Выберите объект',
   'Objects': 'Объекты',
   'Selected': 'Выбрано',
@@ -164,19 +189,29 @@ const RU = Object.freeze({
 
   // Materials / paint
   'Materials': 'Материалы',
+  'Material Slot': 'Слот материала',
+  'Slot': 'Слот',
+  'Principled PBR': 'Основной PBR',
   'Base Color': 'Базовый цвет',
   'Metallic': 'Металличность',
   'Roughness': 'Шероховатость',
   'Opacity': 'Прозрачность',
   'Emissive': 'Свечение',
+  'Emission': 'Интенсивность свечения',
   'Emissive Intensity': 'Интенсивность свечения',
+  'Textures': 'Текстуры',
+  'Normal': 'Нормаль',
   'Normal Map': 'Карта нормалей',
   'Roughness Map': 'Карта шероховатости',
   'Metallic Map': 'Карта металличности',
+  'AO': 'AO',
   'AO Map': 'Карта AO',
   'Emissive Map': 'Карта свечения',
   'Clear Textures': 'Очистить текстуры',
+  'Clear Slot Textures': 'Очистить текстуры слота',
   'Texture Transform': 'Трансформация текстуры',
+  'Rotation °': 'Вращение °',
+  'No material': 'Нет материала',
   'Color': 'Цвет',
   'Size': 'Размер',
   'Strength': 'Сила',
@@ -189,6 +224,8 @@ const RU = Object.freeze({
   'Unsaved': 'Не сохранено',
   '● Unsaved': '● Не сохранено',
   'Diagnostics': 'Диагностика',
+  'gluestack Diagnostics': 'Диагностика gluestack',
+  'gluestack diagnostics': 'Диагностика gluestack',
   'Run Diagnostics': 'Запустить диагностику',
   'Run v1 Release Gate': 'Запустить проверку релиза v1',
   'Metadata Audit': 'Аудит метаданных',
@@ -197,16 +234,29 @@ const RU = Object.freeze({
   'Modifier Stack Diagnostics': 'Диагностика стека модификаторов',
   'Import / Export Diagnostics': 'Диагностика импорта / экспорта',
   'Destructive Guard Diagnostics': 'Проверка защиты данных',
+  'Not run': 'Не запускалось',
+  'Running…': 'Выполняется…',
+  'Copy Report': 'Копировать отчёт',
+  'Run Again': 'Запустить снова',
   'PASS': 'ПРОЙДЕНО',
   'FAIL': 'ОШИБКА',
   'WARN': 'ПРЕДУПРЕЖДЕНИЕ',
 
   // Game ready
   'Game Ready': 'Подготовка для игры',
+  'Meshes': 'Объекты-сетки',
+  'Materials': 'Материалы',
+  'Textures': 'Текстуры',
+  'Texture RAM': 'Память текстур',
+  'GLB size': 'Размер GLB',
   'Analyze': 'Анализировать',
+  'Checks': 'Проверки',
+  'Run Analyze': 'Запустите анализ',
+  'Optimize': 'Оптимизация',
   'Optimize Scene': 'Оптимизировать сцену',
   'Generate LOD': 'Создать LOD',
   'Generate LODs': 'Создать LOD',
+  'Generate LOD 0/1/2': 'Создать LOD 0/1/2',
   'Replace LOD Chain': 'Заменить цепочку LOD',
   'Cleanup Preview': 'Предпросмотр очистки',
   'Export Profile': 'Профиль экспорта',
@@ -301,7 +351,6 @@ const RU = Object.freeze({
   'Reset all gluestack settings to defaults?': 'Сбросить все настройки gluestack к значениям по умолчанию?',
 
   // Existing Russian source strings mapped back to canonical English for English mode
-  'Select an object': 'Выберите объект',
   'Ready': 'Готово',
   'Local projects are empty': 'Локальных проектов пока нет',
   'Choose project number:': 'Выберите номер проекта:',
@@ -350,9 +399,34 @@ function canonical(value) {
   return REVERSE_RU.get(trimmed) ?? trimmed;
 }
 
+function translatePattern(value, language) {
+  if (language !== 'ru') return value;
+
+  let match = value.match(/^Objects\s+(\d+)\s+·\s+Selected\s+(\d+)\s+·\s+Vertices\s+([\d,.]+)\s+·\s+Triangles\s+([\d,.]+)$/);
+  if (match) return `Объекты ${match[1]} · Выбрано ${match[2]} · Вершины ${match[3]} · Треугольники ${match[4]}`;
+
+  match = value.match(/^(\d+)\s+material$/);
+  if (match) return `${match[1]} материал`;
+
+  match = value.match(/^(\d+)\s+material slot\(s\)\s+·\s+selected\s+(\d+)(?:\s+·\s+groups\s+(\d+))?$/);
+  if (match) return `${match[1]} слот(ов) материалов · выбран ${match[2]}${match[3] ? ` · группы ${match[3]}` : ''}`;
+
+  match = value.match(/^Object Mode\s+·\s+(v[\w.-]+)$/);
+  if (match) return `Режим объекта · ${match[1]}`;
+  match = value.match(/^Edit Mode\s+·\s+(v[\w.-]+)$/);
+  if (match) return `Режим редактирования · ${match[1]}`;
+
+  return value;
+}
+
+function translateCanonical(value, language) {
+  if (language === 'en') return value;
+  return translatePattern(RU[value] ?? value, language);
+}
+
 function translateExact(value, language) {
   const key = canonical(value);
-  return language === 'ru' ? (RU[key] ?? value.trim()) : key;
+  return translateCanonical(key, language);
 }
 
 function preserveWhitespace(source, translated) {
@@ -370,7 +444,7 @@ function translateTextNode(node, language) {
     state = { canonical: canonical(current), rendered: current };
     textState.set(node, state);
   }
-  const translated = preserveWhitespace(current, language === 'ru' ? (RU[state.canonical] ?? state.canonical) : state.canonical);
+  const translated = preserveWhitespace(current, translateCanonical(state.canonical, language));
   state.rendered = translated;
   if (node.nodeValue !== translated) node.nodeValue = translated;
 }
@@ -392,7 +466,7 @@ function translateAttributes(element, language) {
       state.set(attribute, { canonical: canonical(current), rendered: current });
     }
     const item = state.get(attribute);
-    const translated = language === 'ru' ? (RU[item.canonical] ?? item.canonical) : item.canonical;
+    const translated = translateCanonical(item.canonical, language);
     item.rendered = translated;
     if (current !== translated) element.setAttribute(attribute, translated);
   }
