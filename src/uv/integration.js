@@ -1,11 +1,12 @@
 import { refreshIcons } from '../ui.js';
 import { UVController } from './controller.js';
+import { UVModalTransform } from './modal-transform.js';
 
 function button(action, icon, label) {
   return `<button type="button" class="uv-action" data-uv-action="${action}"><i data-lucide="${icon}"></i><span>${label}</span></button>`;
 }
 
-export function installUVWorkspace({ editor, editMode, knifeTool, requestNumber }) {
+export function installUVWorkspace({ editor, editMode, knifeTool }) {
   const setStatus = (message) => editor.events.onStatus(message);
   const modelWorkspace = document.querySelector('main.workspace');
   const viewport = document.querySelector('#viewport');
@@ -88,6 +89,11 @@ export function installUVWorkspace({ editor, editMode, knifeTool, requestNumber 
     canvas: workspace.querySelector('#uv-canvas'),
     info: workspace.querySelector('#uv-info'),
   }, setStatus);
+  const modalTransform = new UVModalTransform({
+    getController: () => controller,
+    hud: document.querySelector('#transform-hud'),
+    status: setStatus,
+  });
   const previewHost = workspace.querySelector('#uv-preview-host');
   let active = false;
 
@@ -116,6 +122,7 @@ export function installUVWorkspace({ editor, editMode, knifeTool, requestNumber 
 
   function leave() {
     if (!active) return;
+    if (modalTransform.active) modalTransform.cancel();
     originalViewportParent.appendChild(viewport);
     workspace.hidden = true;
     modelWorkspace.hidden = false;
@@ -133,18 +140,21 @@ export function installUVWorkspace({ editor, editMode, knifeTool, requestNumber 
 
   workspace.querySelectorAll('[data-uv-mode]').forEach((item) => {
     item.addEventListener('click', () => {
+      if (modalTransform.active) modalTransform.cancel();
       controller.setMode(item.dataset.uvMode);
       workspace.querySelectorAll('[data-uv-mode]').forEach((candidate) => candidate.classList.toggle('active', candidate === item));
     });
   });
 
-  function number(label, value, options) {
-    return requestNumber(label, value, options);
-  }
-
   workspace.querySelectorAll('[data-uv-action]').forEach((item) => {
     item.addEventListener('click', () => {
-      switch (item.dataset.uvAction) {
+      const action = item.dataset.uvAction;
+      if (['move', 'rotate', 'scale'].includes(action)) {
+        modalTransform.begin(action);
+        return;
+      }
+      if (modalTransform.active) modalTransform.cancel();
+      switch (action) {
         case 'fit': controller.fit(); break;
         case 'unwrap': controller.unwrap(); break;
         case 'smart': controller.smartProject(); break;
@@ -155,19 +165,6 @@ export function installUVWorkspace({ editor, editMode, knifeTool, requestNumber 
         case 'pack': controller.packIslands(); break;
         case 'average': controller.averageIslandScale(); break;
         case 'clear-seams': controller.clearSeams(); break;
-        case 'move': {
-          const x = number('UV Move X', 0.1); if (x === null) break;
-          const y = number('UV Move Y', 0); if (y !== null) controller.moveSelected(x, y);
-          break;
-        }
-        case 'rotate': {
-          const angle = number('UV Rotate degrees', 90); if (angle !== null) controller.rotateSelected(angle);
-          break;
-        }
-        case 'scale': {
-          const factor = number('UV Scale', 1.1, { min: 0.001 }); if (factor !== null) controller.scaleSelected(factor);
-          break;
-        }
         default: break;
       }
     });
@@ -219,9 +216,13 @@ export function installUVWorkspace({ editor, editMode, knifeTool, requestNumber 
 
   window.addEventListener('keydown', (event) => {
     if (!active || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    if (modalTransform.active) return;
     if (event.code === 'Digit1') { event.preventDefault(); workspace.querySelector('[data-uv-mode="vertex"]').click(); }
     else if (event.code === 'Digit2') { event.preventDefault(); workspace.querySelector('[data-uv-mode="edge"]').click(); }
     else if (event.code === 'Digit3') { event.preventDefault(); workspace.querySelector('[data-uv-mode="island"]').click(); }
+    else if (event.code === 'KeyG') { event.preventDefault(); modalTransform.begin('move'); }
+    else if (event.code === 'KeyR') { event.preventDefault(); modalTransform.begin('rotate'); }
+    else if (event.code === 'KeyS') { event.preventDefault(); modalTransform.begin('scale'); }
     else if (event.code === 'KeyA') {
       event.preventDefault();
       controller.selected.clear();
@@ -243,5 +244,5 @@ export function installUVWorkspace({ editor, editMode, knifeTool, requestNumber 
   });
 
   refreshIcons();
-  return { controller, enter, leave, get active() { return active; } };
+  return { controller, modalTransform, enter, leave, get active() { return active; } };
 }
