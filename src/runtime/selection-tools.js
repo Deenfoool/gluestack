@@ -14,9 +14,19 @@ function refreshEdit(editMode) {
 }
 
 function editUniverse(editMode) {
-  if (editMode.selectionMode === 'vertex') return editMode.vertices.map((_, index) => index);
-  if (editMode.selectionMode === 'edge') return editMode.edges.map((edge) => edge.key);
-  return editMode.faceGroups.map((group) => group.id);
+  if (editMode.selectionMode === 'vertex') {
+    return editMode.vertices
+      .map((_, index) => index)
+      .filter((index) => !editMode.isVertexHidden?.(index));
+  }
+  if (editMode.selectionMode === 'edge') {
+    return editMode.logicalEdges
+      .filter((edge) => !editMode.isEdgeHidden?.(edge))
+      .map((edge) => edge.key);
+  }
+  return editMode.faceGroups
+    .filter((group) => !(group.triangles ?? []).every((index) => editMode.isTriangleHidden?.(index)))
+    .map((group) => group.id);
 }
 
 function invertEditSelection(editMode) {
@@ -32,19 +42,22 @@ function invertEditSelection(editMode) {
 }
 
 function selectedSeedVertices(editMode) {
-  return editMode.getSelectedVertexIds();
+  return new Set([...editMode.getSelectedVertexIds()].filter((id) => !editMode.isVertexHidden?.(id)));
 }
 
 function connectedVertices(editMode, seeds) {
   const adjacency = new Map();
-  for (let index = 0; index < editMode.vertices.length; index += 1) adjacency.set(index, new Set());
-  for (const edge of editMode.edges) {
+  for (let index = 0; index < editMode.vertices.length; index += 1) {
+    if (!editMode.isVertexHidden?.(index)) adjacency.set(index, new Set());
+  }
+  for (const edge of editMode.logicalEdges) {
+    if (editMode.isEdgeHidden?.(edge)) continue;
     adjacency.get(edge.a)?.add(edge.b);
     adjacency.get(edge.b)?.add(edge.a);
   }
 
-  const visited = new Set(seeds);
-  const queue = [...seeds];
+  const visited = new Set([...seeds].filter((id) => adjacency.has(id)));
+  const queue = [...visited];
   while (queue.length) {
     const vertex = queue.shift();
     for (const next of adjacency.get(vertex) ?? []) {
@@ -70,13 +83,16 @@ function selectLinked(editMode) {
   if (editMode.selectionMode === 'vertex') {
     linked.forEach((vertex) => target.add(vertex));
   } else if (editMode.selectionMode === 'edge') {
-    for (const edge of editMode.edges) {
+    for (const edge of editMode.logicalEdges) {
+      if (editMode.isEdgeHidden?.(edge)) continue;
       if (linked.has(edge.a) && linked.has(edge.b)) target.add(edge.key);
     }
   } else {
     for (const group of editMode.faceGroups) {
+      if ((group.triangles ?? []).every((index) => editMode.isTriangleHidden?.(index))) continue;
       const groupVertices = new Set();
       for (const triangleIndex of group.triangles ?? []) {
+        if (editMode.isTriangleHidden?.(triangleIndex)) continue;
         for (const vertex of editMode.triangles[triangleIndex]?.v ?? []) groupVertices.add(vertex);
       }
       if ([...groupVertices].some((vertex) => linked.has(vertex))) target.add(group.id);
