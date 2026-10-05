@@ -1,5 +1,5 @@
 function faceMaterialIndex(editMode, group) {
-  const triangleIndex = group?.triangles?.find((index) => !editMode.isTriangleHidden?.(index));
+  const triangleIndex = group?.triangles?.[0];
   return triangleIndex === undefined ? null : editMode.triangles[triangleIndex]?.materialIndex ?? 0;
 }
 
@@ -24,9 +24,7 @@ function oppositeEdge(group, edgeKey) {
 function edgeToGroups(editMode) {
   const map = new Map();
   for (const group of editMode.faceGroups) {
-    if ((group.triangles ?? []).every((index) => editMode.isTriangleHidden?.(index))) continue;
     for (const key of boundaryKeys(group)) {
-      if (editMode.isEdgeHidden?.(key)) continue;
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(group);
     }
@@ -49,7 +47,7 @@ function collectRing(editMode, seedKey) {
       if (visitedSteps.has(stepKey)) continue;
       visitedSteps.add(stepKey);
       const opposite = oppositeEdge(group, step.edgeKey);
-      if (!opposite || editMode.isEdgeHidden?.(opposite.key)) continue;
+      if (!opposite) continue;
       selected.add(opposite.key);
       queue.push({ edgeKey: opposite.key, fromGroup: group.id });
     }
@@ -62,14 +60,13 @@ function selectEdgeRing(editMode) {
     editMode.status('Edge Ring: переключитесь в Edge Select');
     return false;
   }
-  const seeds = [...editMode.selectedEdges].filter((key) => !editMode.isEdgeHidden?.(key));
-  if (!seeds.length) {
-    editMode.status('Edge Ring: сначала выберите видимое ребро');
+  if (!editMode.selectedEdges.size) {
+    editMode.status('Edge Ring: сначала выберите ребро');
     return false;
   }
 
   const result = new Set();
-  for (const seed of seeds) collectRing(editMode, seed).forEach((key) => result.add(key));
+  for (const seed of editMode.selectedEdges) collectRing(editMode, seed).forEach((key) => result.add(key));
   if (result.size === editMode.selectedEdges.size && [...result].every((key) => editMode.selectedEdges.has(key))) {
     editMode.status('Edge Ring: для выбранного ребра нет однозначной quad-ring цепочки');
     return false;
@@ -89,11 +86,9 @@ function selectByMaterial(editMode) {
     editMode.status('Select by Material: переключитесь в Face Select');
     return false;
   }
-  const seedId = [...editMode.selectedFaces].find((id) => (
-    !(editMode.faceGroups[id]?.triangles ?? []).every((index) => editMode.isTriangleHidden?.(index))
-  ));
+  const seedId = editMode.selectedFaces.values().next().value;
   if (seedId === undefined) {
-    editMode.status('Select by Material: сначала выберите видимую грань');
+    editMode.status('Select by Material: сначала выберите грань');
     return false;
   }
   const materialIndex = faceMaterialIndex(editMode, editMode.faceGroups[seedId]);
@@ -101,7 +96,6 @@ function selectByMaterial(editMode) {
 
   editMode.selectedFaces.clear();
   for (const group of editMode.faceGroups) {
-    if ((group.triangles ?? []).every((index) => editMode.isTriangleHidden?.(index))) continue;
     if (faceMaterialIndex(editMode, group) === materialIndex) editMode.selectedFaces.add(group.id);
   }
   editMode.refreshOverlay();
