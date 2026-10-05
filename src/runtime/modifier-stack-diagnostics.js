@@ -29,12 +29,19 @@ export function installModifierStackDiagnostics({ editor, diagnostics, modifierS
     button.disabled = true;
     const checks = [];
     const baseline = modifierStack.debugCacheStats();
+    // Stack UI prunes caches of detached meshes. Keep diagnostic meshes in a
+    // hidden live subtree until cleanup; never select them or enter history.
+    const root = new THREE.Group();
+    root.name = '__ModifierStackDiagnostics';
+    root.visible = false;
+    editor.modelRoot.add(root);
     let mesh = null;
     let clone = null;
     try {
       mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshStandardMaterial());
       mesh.name = '__ModifierStackDiagnostic';
       editor.assignIds(mesh, true);
+      root.add(mesh);
       mesh.userData.gluestackModifierStack = [
         descriptor('diag-mirror', 'mirror', { axis: 'x' }),
         descriptor('diag-array', 'array', { count: 2, x: 2.5, y: 0, z: 0 }),
@@ -62,6 +69,7 @@ export function installModifierStackDiagnostics({ editor, diagnostics, modifierS
       clone.material = mesh.material.clone();
       clone.userData = structuredClone(mesh.userData);
       editor.assignIds(clone, true);
+      root.add(clone);
       const clonedStacks = modifierStack.cloneStackState(mesh, clone);
       const sourceCount = modifierStack.sourceFor(mesh)?.getAttribute('position')?.count ?? 0;
       const cloneSourceCount = modifierStack.sourceFor(clone)?.getAttribute('position')?.count ?? 0;
@@ -86,6 +94,7 @@ export function installModifierStackDiagnostics({ editor, diagnostics, modifierS
     } finally {
       if (mesh) modifierStack.releaseMesh(mesh);
       if (clone) modifierStack.releaseMesh(clone);
+      editor.modelRoot.remove(root);
       modifierStack.pruneCaches();
       disposeMesh(mesh);
       disposeMesh(clone);

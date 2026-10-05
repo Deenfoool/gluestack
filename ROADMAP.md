@@ -241,11 +241,13 @@ Fixture-набор создан в `tests/fixtures/`; реальный PASS ос
 - [x] Collapse/expand + persisted UI state.
 - [x] Explicit failed-modifier state.
 - [x] `Bake Through Here` для корректной mid-stack семантики.
-- [ ] Intermediate cache/invalidation для тяжёлых stacks.
-- [ ] Non-destructive Boolean либо окончательно documented destructive policy v1.
-- [ ] Stack-safe Duplicate object.
-- [ ] Stack-safe Apply Transform / Origin.
-- [ ] Source-cache lifecycle regression test после delete/open/bake/apply.
+- [x] Intermediate cache/invalidation для тяжёлых stacks: неизменённый prefix переиспользуется, замена source инвалидирует кеш; автоматическая регрессия.
+- [x] Documented destructive Boolean policy v1 — [семантика и ограничения](./docs/MODIFIER_STACK.md).
+- [x] Stack-safe Duplicate object: независимые source/descriptors, Undo/Redo regression.
+- [x] Stack-safe Apply Transform / Origin: мировая геометрия сохраняется; вся выборка проверяется до изменения; regression для failed stack / unsupported meshes.
+- [x] Source-cache lifecycle regression после delete/open/bake/apply/clear и удаления последнего modifier; 12 бинарных `.gluestack` reopen в Node.
+
+Проверки запускаются через `npm ci && npm test`. P0.4 проверен на уровне DOM/геометрии; production browser/WebGL QA в P0.1/P0.2 остаётся незавершённым.
 
 ## P0.5 Advanced UV release QA
 
@@ -472,7 +474,7 @@ Fixture-набор создан в `tests/fixtures/`; реальный PASS ос
 ## Текущий порядок работ
 
 1. **P0 browser/golden QA — реальный запуск остаётся главным release gate.**
-2. **Modifier Stack caching + stack-safe object operations.**
+2. **Modifier Stack: production browser QA для кеша и безопасных операций (Node regression выполнен).**
 3. **Import/export compatibility hardening.**
 4. **Performance/workers.**
 5. **P1 Modeling UX + Materials/Paint.**

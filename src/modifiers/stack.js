@@ -192,8 +192,8 @@ export function installModifierStack({ editor, editMode, modifiers }) {
   function captureSource(mesh, force = false) {
     if (!isEditableMesh(mesh)) return null;
     const stack = stackOf(mesh);
-    if (!force && stack.length && sourceByMesh.has(mesh)) return sourceByMesh.get(mesh);
     const id = meshId(mesh);
+    if (!force && stack.length && sourceByMesh.has(mesh) && sourceByMesh.get(mesh) === sourceById.get(id)) return sourceByMesh.get(mesh);
     if (!force && stack.length && sourceById.has(id)) {
       const source = sourceById.get(id);
       sourceByMesh.set(mesh, source);
@@ -203,8 +203,9 @@ export function installModifierStack({ editor, editMode, modifiers }) {
   }
 
   function sourceFor(mesh) {
-    if (sourceByMesh.has(mesh)) return sourceByMesh.get(mesh);
     const id = mesh?.userData?.gluestackId;
+    if (sourceByMesh.has(mesh) && sourceByMesh.get(mesh) === sourceById.get(id)) return sourceByMesh.get(mesh);
+    sourceByMesh.delete(mesh);
     if (id && sourceById.has(id)) {
       const source = sourceById.get(id);
       sourceByMesh.set(mesh, source);
@@ -327,6 +328,13 @@ export function installModifierStack({ editor, editMode, modifiers }) {
       const previous = mesh.geometry;
       mesh.geometry = geometry;
       disposeGeometryIfUnreferenced(editor, previous);
+      // With no descriptors left, the displayed geometry is the new source.
+      // Keeping the post matrix would apply it twice when adding another stack.
+      if (!stack.length) {
+        delete mesh.userData[POST_MATRIX_KEY];
+        delete mesh.userData[ERRORS_KEY];
+        forgetSource(mesh, true);
+      }
       editor.refreshSelectionVisuals();
       editor.events.onTransform(mesh);
       editor.events.onStructure();
@@ -375,15 +383,21 @@ export function installModifierStack({ editor, editMode, modifiers }) {
     if (index < 0) return false;
     const source = sourceFor(mesh);
     if (!source) return false;
-    editor.checkpoint('Bake modifiers through selected');
+    let baked = null;
     try {
-      const baked = evaluateItems(mesh, stack.slice(0, index + 1), source).geometry;
+      baked = evaluateItems(mesh, stack.slice(0, index + 1), source).geometry;
+      // A valid prefix is not enough: validate the remaining stack before
+      // replacing the source, so a failing suffix leaves the project intact.
+      const checked = evaluateItems(mesh, stack.slice(index + 1), baked).geometry;
+      checked.dispose();
+      editor.checkpoint('Bake modifiers through selected');
       setSourceGeometry(mesh, baked, { clone: false });
+      baked = null; // source cache owns it now
       stack.splice(0, index + 1);
       const ok = rebuild(mesh);
       editor.events.onStatus(ok ? 'Modifier Stack: верхняя часть запечена в source geometry' : 'Bake выполнен, но оставшийся stack содержит ошибку');
       render(); return ok;
-    } catch (error) { editor.events.onStatus(`Bake Through: ${error.message || error}`); return false; }
+    } catch (error) { baked?.dispose(); editor.events.onStatus(`Bake Through: ${error.message || error}`); return false; }
   }
 
   function clear(mesh = editor.selected) {
@@ -399,7 +413,20 @@ export function installModifierStack({ editor, editMode, modifiers }) {
 
   function apply(mesh = editor.selected) {
     if (!isEditableMesh(mesh) || !stackOf(mesh).length) return false;
+    let geometry;
+    try {
+      geometry = applyPostMatrix(mesh, evaluateStackCached(mesh, stackOf(mesh), sourceFor(mesh)));
+      geometry.computeBoundingBox();
+      geometry.computeBoundingSphere();
+    } catch (error) {
+      geometry?.dispose();
+      editor.events.onStatus(`Apply Stack отменён: ${error.message || error}`);
+      return false;
+    }
     editor.checkpoint('Apply modifier stack');
+    const previous = mesh.geometry;
+    mesh.geometry = geometry;
+    disposeGeometryIfUnreferenced(editor, previous);
     mesh.userData[STACK_KEY] = []; delete mesh.userData[POST_MATRIX_KEY]; delete mesh.userData[ERRORS_KEY]; forgetSource(mesh, true);
     editor.refreshSelectionVisuals(); editor.events.onTransform(mesh); editor.events.onStructure(); editor.events.onStatus('Modifier Stack применён к geometry'); render(); return true;
   }
@@ -422,41 +449,74 @@ export function installModifierStack({ editor, editMode, modifiers }) {
     return count;
   }
 
-  function applyObjectMatrixToPost(mesh, matrix) { const post = postMatrixOf(mesh); setPostMatrix(mesh, matrix.clone().multiply(post)); return rebuild(mesh, { silent: true }); }
-  function translatePost(mesh, offset) { const post = postMatrixOf(mesh); setPostMatrix(mesh, new THREE.Matrix4().makeTranslation(offset.x, offset.y, offset.z).multiply(post)); return rebuild(mesh, { silent: true }); }
+  function changeObjectGeometry(operation) {
+    const meshes = editor.getSelectedObjects();
+    const prepared = [];
+    try {
+      if (!meshes.length || meshes.some((mesh) => !isEditableMesh(mesh) || hasMorphData(mesh) || mesh.children.length)) {
+        throw new Error('выберите обычные Mesh без Skin/Morph/Instances и дочерних объектов');
+      }
+      for (const mesh of meshes) {
+        mesh.updateMatrix();
+        if (!mesh.matrix.elements.every(Number.isFinite) || Math.abs(mesh.matrix.determinant()) < 1e-12) {
+          throw new Error('transform содержит некорректные значения или нулевой scale');
+        }
+        const stacked = hasStack(mesh);
+        const geometry = stacked
+          ? applyPostMatrix(mesh, evaluateStackCached(mesh, stackOf(mesh), sourceFor(mesh)))
+          : mesh.geometry.clone();
+        const entry = { mesh, geometry, stacked };
+        prepared.push(entry);
+        geometry.computeBoundingBox();
+        if (!geometry.boundingBox || geometry.boundingBox.isEmpty()) throw new Error('пустая geometry');
+        const bounds = [...geometry.boundingBox.min.toArray(), ...geometry.boundingBox.max.toArray()];
+        if (!bounds.every(Number.isFinite)) throw new Error('geometry содержит некорректные координаты');
+        if (operation === 'transform') {
+          entry.matrix = mesh.matrix.clone();
+        } else {
+          const center = geometry.boundingBox.getCenter(new THREE.Vector3());
+          entry.offset = center.clone().multiply(mesh.scale).applyQuaternion(mesh.quaternion);
+          entry.matrix = new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z);
+        }
+        entry.post = entry.matrix.clone().multiply(postMatrixOf(mesh));
+        geometry.applyMatrix4(entry.matrix);
+        geometry.computeBoundingBox();
+        geometry.computeBoundingSphere();
+      }
+    } catch (error) {
+      for (const entry of prepared) entry.geometry.dispose();
+      editor.events.onStatus(`${operation === 'transform' ? 'Apply Transform' : 'Origin'} отменён: ${error.message || error}`);
+      return false;
+    }
+
+    // Validate and evaluate the entire selection before changing any live mesh
+    // or adding an undo entry. A failed stack must never reset its transform.
+    editor.checkpoint(operation === 'transform' ? 'Apply transform' : 'Origin to geometry');
+    for (const { mesh, geometry, stacked, post, offset } of prepared) {
+      const previous = mesh.geometry;
+      mesh.geometry = geometry;
+      if (stacked) setPostMatrix(mesh, post);
+      if (operation === 'transform') {
+        mesh.position.set(0, 0, 0);
+        mesh.quaternion.identity();
+        mesh.scale.set(1, 1, 1);
+      } else mesh.position.add(offset);
+      mesh.updateMatrix();
+      disposeGeometryIfUnreferenced(editor, previous);
+    }
+    editor.refreshSelectionVisuals();
+    editor.events.onTransform(editor.selected);
+    editor.events.onStructure();
+    editor.events.onStatus(`${operation === 'transform' ? 'Transform применён' : 'Origin центрирован'} · ${prepared.length} Mesh`);
+    return true;
+  }
 
   function installObjectOperationBridge() {
     const originalDuplicate = editor.duplicateSelected.bind(editor);
     editor.duplicateSelected = (...args) => { const sources = editor.getTopLevelSelection(); const clones = originalDuplicate(...args); sources.forEach((source, index) => cloneStackState(source, clones[index])); render(); return clones; };
 
-    editor.applyTransform = () => {
-      const meshes = editor.getSelectedObjects().filter((object) => object.isMesh && !object.isSkinnedMesh && object.children.length === 0);
-      if (!meshes.length) { editor.events.onStatus('Apply Transform: выберите обычный Mesh без дочерних объектов'); return false; }
-      editor.checkpoint('Apply transform'); let stacked = 0;
-      for (const mesh of meshes) {
-        mesh.updateMatrix(); const matrix = mesh.matrix.clone();
-        if (hasStack(mesh)) { applyObjectMatrixToPost(mesh, matrix); stacked += 1; }
-        else { const geometry = mesh.geometry.clone(); geometry.applyMatrix4(matrix); geometry.computeBoundingBox(); geometry.computeBoundingSphere(); const previous = mesh.geometry; mesh.geometry = geometry; disposeGeometryIfUnreferenced(editor, previous); }
-        mesh.position.set(0, 0, 0); mesh.rotation.set(0, 0, 0); mesh.scale.set(1, 1, 1); mesh.updateMatrix();
-      }
-      editor.refreshSelectionVisuals(); editor.events.onTransform(editor.selected); editor.events.onStructure();
-      editor.events.onStatus(`Transform применён к ${meshes.length} Mesh${stacked ? ` · stack-safe ${stacked}` : ''}`); return true;
-    };
-
-    editor.originToGeometry = () => {
-      const meshes = editor.getSelectedObjects().filter((object) => object.isMesh && !object.isSkinnedMesh);
-      if (!meshes.length) { editor.events.onStatus('Origin: выберите Mesh'); return false; }
-      editor.checkpoint('Origin to geometry'); let stacked = 0;
-      for (const mesh of meshes) {
-        mesh.geometry.computeBoundingBox(); if (!mesh.geometry.boundingBox) continue;
-        const center = mesh.geometry.boundingBox.getCenter(new THREE.Vector3()); const offset = center.clone().multiply(mesh.scale).applyQuaternion(mesh.quaternion);
-        if (hasStack(mesh)) { translatePost(mesh, center.clone().multiplyScalar(-1)); stacked += 1; }
-        else { const geometry = mesh.geometry.clone(); geometry.translate(-center.x, -center.y, -center.z); geometry.computeBoundingBox(); geometry.computeBoundingSphere(); const previous = mesh.geometry; mesh.geometry = geometry; disposeGeometryIfUnreferenced(editor, previous); }
-        mesh.position.add(offset); mesh.updateMatrix();
-      }
-      editor.refreshSelectionVisuals(); editor.events.onTransform(editor.selected); editor.events.onStructure();
-      editor.events.onStatus(`Origin центрирован у ${meshes.length} Mesh${stacked ? ` · stack-safe ${stacked}` : ''}`); return true;
-    };
+    editor.applyTransform = () => changeObjectGeometry('transform');
+    editor.originToGeometry = () => changeObjectGeometry('origin');
   }
 
   function installHistoryBridge() {
