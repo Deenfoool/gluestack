@@ -67,6 +67,9 @@ function ensureStyle() {
 
 function bindIcon(element, definition) {
   if (!(element instanceof HTMLElement)) return;
+  // A failed image is removed, but that must not turn the next DOM scan into
+  // another network request. Keep the Lucide fallback until the page reloads.
+  if (element.dataset.icons8FailedId === String(definition.id)) return;
   const previous = element.querySelector(':scope > .icons8-tool-icon');
   if (previous?.dataset.icons8Id === String(definition.id)) return;
   previous?.remove();
@@ -90,6 +93,7 @@ function bindIcon(element, definition) {
     element.classList.remove('icons8-tool-failed');
   }, { once: true });
   img.addEventListener('error', () => {
+    element.dataset.icons8FailedId = String(definition.id);
     element.classList.remove('icons8-tool-ready');
     element.classList.add('icons8-tool-failed');
     img.remove();
@@ -110,8 +114,10 @@ function scan(root = document) {
 function updateCreditText() {
   const ru = currentLanguage() === 'ru';
   document.querySelectorAll('.icons8-credit').forEach((credit) => {
-    credit.textContent = ru ? 'Иконки: Icons8' : 'Icons by Icons8';
-    credit.title = ru ? 'Иконки инструментов предоставлены Icons8' : 'Tool icons by Icons8';
+    const text = ru ? 'Иконки: Icons8' : 'Icons by Icons8';
+    const title = ru ? 'Иконки инструментов предоставлены Icons8' : 'Tool icons by Icons8';
+    if (credit.textContent !== text) credit.textContent = text;
+    if (credit.title !== title) credit.title = title;
   });
 }
 

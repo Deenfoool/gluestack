@@ -1,6 +1,9 @@
 import { createIcons, icons } from 'lucide';
 
 export function refreshIcons() {
+  // Lucide also replaces SVGs it already rendered. Do not rewrite the whole
+  // document when there are no new placeholders to resolve.
+  if (!document.querySelector('i[data-lucide]')) return;
   createIcons({ icons, attrs: { 'stroke-width': 1.7 } });
 }
 

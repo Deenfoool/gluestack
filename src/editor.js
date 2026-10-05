@@ -105,6 +105,9 @@ export class Editor3D {
 
   animate = () => {
     this.animationFrame = requestAnimationFrame(this.animate);
+    // The full-size canvas is hidden behind Home. Rendering it still consumes
+    // GPU time and updates every selection box even though no frame is visible.
+    if (document.hidden || document.body.classList.contains('gluestack-home-open')) return;
     this.orbit.update();
     this.updateSelectionBoxes();
     this.renderer.render(this.scene, this.camera);
