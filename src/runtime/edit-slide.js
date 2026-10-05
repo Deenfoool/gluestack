@@ -9,6 +9,22 @@ function status(editMode, ru, en) {
   editMode.status(language() === 'en' ? en : ru);
 }
 
+function installHistoryLayerGuard(editor, editMode) {
+  if (editor.__gluestackEditHistoryLayerGuard) return;
+  const captureState = editor.captureState.bind(editor);
+  editor.captureState = (...args) => {
+    const mesh = editMode.active ? editMode.mesh : null;
+    if (!mesh || !editMode.hiddenTriangles?.size) return captureState(...args);
+    const previousMask = mesh.layers.mask;
+    // glTF-loaded/editor-created meshes live on the default render layer. Hidden
+    // component isolation is viewport-only and must never enter Undo snapshots.
+    mesh.layers.set(0);
+    try { return captureState(...args); }
+    finally { mesh.layers.mask = previousMask; }
+  };
+  editor.__gluestackEditHistoryLayerGuard = true;
+}
+
 export class EditSlideTool {
   constructor({ editor, editMode }) {
     this.editor = editor;
@@ -18,6 +34,7 @@ export class EditSlideTool {
     this.lastPointer = null;
     this.pending = null;
     this.frame = 0;
+    installHistoryLayerGuard(editor, editMode);
 
     window.addEventListener('pointermove', (event) => {
       this.lastPointer = { x: event.clientX, y: event.clientY };
