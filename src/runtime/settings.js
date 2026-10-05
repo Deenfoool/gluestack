@@ -6,6 +6,7 @@ const SETTINGS_VERSION = 1;
 
 const DEFAULTS = Object.freeze({
   general: {
+    language: 'ru',
     autosave: true,
     autosaveDelaySeconds: 2,
   },
@@ -48,6 +49,10 @@ function boolean(value, fallback) {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function language(value, fallback = 'ru') {
+  return value === 'en' ? 'en' : value === 'ru' ? 'ru' : fallback;
+}
+
 function color(value, fallback) {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : fallback;
 }
@@ -60,6 +65,7 @@ function normalizeSettings(raw = {}) {
   const transform = raw.transform ?? {};
   return {
     general: {
+      language: language(general.language, defaults.general.language),
       autosave: boolean(general.autosave, defaults.general.autosave),
       autosaveDelaySeconds: number(general.autosaveDelaySeconds, defaults.general.autosaveDelaySeconds, 0.5, 60),
     },
@@ -137,6 +143,7 @@ function settingInput(root, path) {
 
 function writeForm(root, settings) {
   for (const [path, value] of [
+    ['general.language', settings.general.language],
     ['general.autosave', settings.general.autosave],
     ['general.autosaveDelaySeconds', settings.general.autosaveDelaySeconds],
     ['viewport.background', settings.viewport.background],
@@ -169,6 +176,7 @@ function readForm(root) {
   const checked = (path) => Boolean(settingInput(root, path)?.checked);
   return normalizeSettings({
     general: {
+      language: value('general.language'),
       autosave: checked('general.autosave'),
       autosaveDelaySeconds: value('general.autosaveDelaySeconds'),
     },
@@ -220,6 +228,7 @@ function createPanel() {
           <div class="settings-page" data-settings-page="general">
             <h2>General</h2>
             <p>Global editor preferences. They are stored locally in this browser and are not written into GLB files.</p>
+            <label class="settings-row"><span><strong>Language</strong><small>Interface language. Applied immediately.</small></span><select data-setting="general.language"><option value="ru">Русский</option><option value="en">English</option></select></label>
             <label class="settings-row"><span><strong>Autosave</strong><small>Save dirty projects to IndexedDB automatically.</small></span><input data-setting="general.autosave" type="checkbox"></label>
             <label class="settings-row"><span><strong>Autosave delay</strong><small>Delay after the last edit before autosave starts.</small></span><div class="settings-number"><input data-setting="general.autosaveDelaySeconds" type="number" min="0.5" max="60" step="0.5"><em>s</em></div></label>
           </div>
@@ -276,10 +285,9 @@ function createPanel() {
     .settings-body{display:grid;grid-template-columns:180px 1fr;min-height:0}
     .settings-nav{padding:10px;border-right:1px solid #3d3d3d;background:#202020;display:flex;flex-direction:column;gap:3px}
     .settings-nav button{display:flex;align-items:center;gap:9px;text-align:left;padding:8px 9px;font-size:12px}.settings-nav button:hover{background:#303030}.settings-nav button.active{background:#3a3a3a;color:#fff}
-    .settings-nav svg{width:15px;height:15px}
     .settings-pages{overflow:auto;padding:18px 22px}.settings-page h2{margin:0 0 5px;font-size:18px}.settings-page>p{margin:0 0 18px;color:#949494;font-size:11px;line-height:1.5}
     .settings-row{min-height:54px;display:flex;align-items:center;justify-content:space-between;gap:20px;border-top:1px solid #333;padding:8px 0}.settings-row>span{display:flex;flex-direction:column;gap:3px}.settings-row strong{font-size:12px;font-weight:600}.settings-row small{font-size:10px;color:#8e8e8e;line-height:1.35}
-    .settings-row input[type="number"]{width:92px}.settings-row input[type="color"]{width:42px;height:28px;padding:2px}.settings-row input[type="checkbox"]{width:16px;height:16px;accent-color:#d78327}.settings-row input[type="number"],.settings-row input[type="color"]{background:#191919;color:#ddd;border:1px solid #505050;border-radius:3px;padding:5px 6px}
+    .settings-row input[type="number"]{width:92px}.settings-row input[type="color"]{width:42px;height:28px;padding:2px}.settings-row input[type="checkbox"]{width:16px;height:16px;accent-color:#d78327}.settings-row input[type="number"],.settings-row input[type="color"],.settings-row select{background:#191919;color:#ddd;border:1px solid #505050;border-radius:3px;padding:5px 6px}.settings-row select{min-width:130px}
     .settings-number{display:flex;align-items:center;gap:5px}.settings-number em{font-style:normal;font-size:10px;color:#999;min-width:12px}
     .settings-footer{display:grid;grid-template-columns:auto 1fr repeat(4,auto);align-items:center;gap:7px;padding:10px 12px;border-top:1px solid #3d3d3d;background:#292929}.settings-footer>span{font-size:10px;color:#8f8f8f}.settings-footer button{padding:6px 10px;border-color:#4b4b4b;background:#333;display:flex;align-items:center;gap:6px;font-size:11px}.settings-footer button:hover{background:#3e3e3e}.settings-footer button.primary{background:#b76518;border-color:#d37b27;color:#fff}.settings-footer svg{width:13px;height:13px}
     @media(max-width:680px){.settings-body{grid-template-columns:1fr}.settings-nav{border-right:0;border-bottom:1px solid #3d3d3d;flex-direction:row;overflow:auto}.settings-nav button span{display:none}.settings-dialog{height:calc(100vh - 16px)}.settings-footer{grid-template-columns:1fr repeat(2,auto)}.settings-footer>span,.settings-footer>div,.settings-footer button[data-settings-action="import"],.settings-footer button[data-settings-action="export"]{display:none}}
@@ -289,10 +297,11 @@ function createPanel() {
   return root;
 }
 
-export function installSettings({ editor, projects = null }) {
+export function installSettings({ editor, projects = null, i18n = null }) {
   if (!editor || editor.settings) return editor?.settings ?? null;
 
   const state = loadStoredSettings();
+  if (i18n) state.general.language = i18n.getLanguage();
   const root = createPanel();
   const status = root.querySelector('[data-settings-status]');
   const importInput = document.createElement('input');
@@ -343,6 +352,7 @@ export function installSettings({ editor, projects = null }) {
   function apply({ announce = false } = {}) {
     const { viewport, navigation, transform, general } = api.state;
 
+    i18n?.setLanguage(general.language, { announce: false });
     if (editor.scene.background?.isColor) editor.scene.background.set(viewport.background);
     if (editor.grid) editor.grid.visible = viewport.grid;
     if (editor.axes) editor.axes.visible = viewport.axes;
@@ -382,7 +392,7 @@ export function installSettings({ editor, projects = null }) {
     const sceneFar = document.querySelector('#scene-far');
     if (sceneFar && document.activeElement !== sceneFar) sceneFar.value = String(editor.camera.far);
 
-    if (announce) editor.events.onStatus('Settings применены');
+    if (announce) editor.events.onStatus(general.language === 'ru' ? 'Настройки применены' : 'Settings applied');
   }
 
   function persist(message = 'Saved locally') {
@@ -406,6 +416,7 @@ export function installSettings({ editor, projects = null }) {
     writeForm(root, api.state);
     root.hidden = false;
     document.querySelector('#file-menu')?.removeAttribute('open');
+    i18n?.translate(root);
     root.querySelector('.settings-nav button.active')?.focus();
   }
 
@@ -414,7 +425,10 @@ export function installSettings({ editor, projects = null }) {
   }
 
   function reset() {
-    if (!window.confirm('Reset all gluestack settings to defaults?')) return false;
+    const prompt = api.state.general.language === 'ru'
+      ? 'Сбросить все настройки gluestack к значениям по умолчанию?'
+      : 'Reset all gluestack settings to defaults?';
+    if (!window.confirm(prompt)) return false;
     setState(cloneDefaults(), { message: 'Defaults restored', announce: true });
     return true;
   }
@@ -481,7 +495,7 @@ export function installSettings({ editor, projects = null }) {
   }, { capture: true });
 
   const menu = document.querySelector('#file-menu .menu-popover');
-  if (menu) {
+  if (menu && !menu.querySelector('[data-settings-open]')) {
     const separator = document.createElement('div');
     separator.className = 'menu-separator';
     const button = document.createElement('button');
@@ -494,6 +508,7 @@ export function installSettings({ editor, projects = null }) {
 
   writeForm(root, api.state);
   apply();
+  i18n?.translate(document.body);
   refreshIcons();
   return api;
 }
