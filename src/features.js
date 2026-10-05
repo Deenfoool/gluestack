@@ -53,6 +53,7 @@ function makeHomeImporter({ editor, projects, importer }) {
 
 async function installFeaturesOnce({ editor, editMode, knifeTool }) {
   const i18n = await loadAndInstall(editor, 'Localization', () => import('./runtime/i18n.js'), ({ installI18n }) => installI18n({ editor }));
+  const icons8 = await loadAndInstall(editor, 'Icons8 tool icons', () => import('./runtime/icons8-tools.js'), ({ installIcons8Tools }) => installIcons8Tools());
   const resources = await loadAndInstall(editor, 'Resource ownership', () => import('./runtime/resource-ownership.js'), ({ installResourceOwnership }) => installResourceOwnership(editor));
   const transformIntegrity = await loadAndInstall(editor, 'Transform integrity', () => import('./runtime/transform-integrity.js'), ({ installTransformIntegrity }) => installTransformIntegrity(editor));
   const animations = await loadAndInstall(editor, 'Animations', () => import('./runtime/animations.js'), ({ installAnimations }) => installAnimations(editor));
@@ -125,7 +126,7 @@ async function installFeaturesOnce({ editor, editMode, knifeTool }) {
   const hardening = await loadAndInstall(editor, 'Runtime hardening', () => import('./runtime/hardening.js'), ({ installRuntimeHardening }) => installRuntimeHardening({ editor, projects, editMode }));
 
   const installed = {
-    i18n,
+    i18n, icons8,
     uv, advancedUV, smartIslands, harmonicUnwrap, uvRelax, uvIslandTools,
     materials, projects, settings, home, homeReturn, gameReady, gameReadyValidator, lodPolicy, optimizerV2, exportProfiles, cleanupAudit,
     paint, procedural, scene, hardening, resources, transformIntegrity, importer, integrity,
@@ -171,6 +172,7 @@ async function installFeaturesOnce({ editor, editMode, knifeTool }) {
   if (failed.length) editor.events.onStatus(`Базовый редактор готов · не загрузились: ${failed.join(', ')}`);
   else editor.events.onStatus('Готово · все дополнительные модули подключены');
   i18n?.translate(document.body);
+  icons8?.scan?.();
   return result;
 }
 
