@@ -50,11 +50,25 @@ export class EditModalTools {
     this.state = null;
     this.lastPointer = null;
     this.suppressClick = false;
+    this.pointerFrame = 0;
+    this.pendingPointer = null;
 
     window.addEventListener('pointermove', (event) => {
       this.lastPointer = { x: event.clientX, y: event.clientY };
       if (!this.state) return;
-      this.updateFromPointer(event);
+      this.pendingPointer = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        shiftKey: event.shiftKey,
+        ctrlKey: event.ctrlKey,
+      };
+      if (this.pointerFrame) return;
+      this.pointerFrame = requestAnimationFrame(() => {
+        this.pointerFrame = 0;
+        const pointer = this.pendingPointer;
+        this.pendingPointer = null;
+        if (this.state && pointer) this.updateFromPointer(pointer);
+      });
     }, { capture: true });
 
     window.addEventListener('pointerdown', (event) => {
@@ -63,6 +77,7 @@ export class EditModalTools {
       if (event.button === 0) {
         event.preventDefault();
         event.stopImmediatePropagation();
+        this.flushPointerPreview();
         this.suppressClick = viewportClick;
         this.commit();
       } else if (event.button === 2) {
@@ -89,9 +104,8 @@ export class EditModalTools {
 
     window.addEventListener('keydown', (event) => {
       if (!this.state) return;
-      const wasActive = true;
       const handled = this.handleKey(event);
-      if (handled || wasActive) {
+      if (handled || this.state) {
         event.preventDefault();
         event.stopImmediatePropagation();
       }
@@ -99,6 +113,16 @@ export class EditModalTools {
   }
 
   get active() { return Boolean(this.state); }
+
+  flushPointerPreview() {
+    if (this.pointerFrame) {
+      cancelAnimationFrame(this.pointerFrame);
+      this.pointerFrame = 0;
+    }
+    const pointer = this.pendingPointer;
+    this.pendingPointer = null;
+    if (this.state && pointer) this.updateFromPointer(pointer);
+  }
 
   preflight(type) {
     const c = this.editMode;
@@ -137,10 +161,10 @@ export class EditModalTools {
     const baseValues = type === 'extrude'
       ? { distance: 0 }
       : type === 'inset'
-        ? { factor: 0.2 }
+        ? { factor: 0.001 }
         : type === 'loopCut'
           ? { factor: 0.5 }
-          : { factor: 0.12, depth: 0.08 };
+          : { factor: 0.001, depth: 0 };
 
     this.editor.beginHistory(TYPES[type].history);
     this.editor.orbit.enabled = false;
@@ -166,7 +190,11 @@ export class EditModalTools {
   }
 
   label() {
-    const raw = TYPES[this.state?.type]?.label ?? 'Tool';
+    return this.labelFor(this.state?.type);
+  }
+
+  labelFor(type) {
+    const raw = TYPES[type]?.label ?? 'Tool';
     return window.__gluestackI18n?.t?.(raw) ?? raw;
   }
 
@@ -227,7 +255,7 @@ export class EditModalTools {
       if (event.ctrlKey) value = Math.round(value / 0.1) * 0.1;
       s.values.distance = value;
     } else if (s.type === 'inset') {
-      let value = 0.2 + (dx - dy) * 0.002;
+      let value = Math.abs(dx - dy) * 0.002;
       if (event.ctrlKey) value = Math.round(value * 20) / 20;
       s.values.factor = clamp(value, 0.001, 0.999);
     } else if (s.type === 'loopCut') {
@@ -235,8 +263,8 @@ export class EditModalTools {
       if (event.ctrlKey) value = Math.round(value * 20) / 20;
       s.values.factor = clamp(value, 0.001, 0.999);
     } else if (s.type === 'bevel') {
-      let factor = 0.12 + dx * 0.0015;
-      let depth = 0.08 - dy * s.scale * 0.5;
+      let factor = 0.001 + Math.abs(dx) * 0.0015;
+      let depth = -dy * s.scale * 0.5;
       if (event.ctrlKey) {
         factor = Math.round(factor * 20) / 20;
         depth = Math.round(depth / 0.05) * 0.05;
@@ -263,7 +291,7 @@ export class EditModalTools {
   handleKey(event) {
     if (!this.state) return false;
     if (event.key === 'Escape') { this.cancel(); return true; }
-    if (event.key === 'Enter') { this.commit(); return true; }
+    if (event.key === 'Enter') { this.flushPointerPreview(); this.commit(); return true; }
     if (event.key === 'Backspace') {
       this.state.numeric = this.state.numeric.slice(0, -1);
       if (this.state.numeric) this.applyNumeric();
@@ -312,14 +340,12 @@ export class EditModalTools {
     return true;
   }
 
-  labelFor(type) {
-    const raw = TYPES[type]?.label ?? 'Tool';
-    return window.__gluestackI18n?.t?.(raw) ?? raw;
-  }
-
   cancel() {
     const s = this.state;
     if (!s) return false;
+    if (this.pointerFrame) cancelAnimationFrame(this.pointerFrame);
+    this.pointerFrame = 0;
+    this.pendingPointer = null;
     this.restoreBase();
     this.state = null;
     this.editor.orbit.enabled = s.orbitEnabled;
