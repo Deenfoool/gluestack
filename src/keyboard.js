@@ -5,18 +5,55 @@ import { installSelectionTools } from './runtime/selection-tools.js';
 import { installBoxSelect } from './runtime/box-select.js';
 import { installCircleSelect } from './runtime/circle-select.js';
 import { installAdvancedEditSelection } from './runtime/edit-selection-advanced.js';
-import { installEditUXPack } from './runtime/edit-ux-pack.js';
 import { installVertexPicking } from './runtime/vertex-picking.js';
-import { installEdgePicking } from './runtime/edge-picking.js';
 
 export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snapButton, openAddMenu }) {
   const selectionTools = installSelectionTools({ editor, editMode });
   const boxSelect = installBoxSelect({ editor, editMode });
   const circleSelect = installCircleSelect({ editor, editMode });
   const advancedSelection = installAdvancedEditSelection({ editMode });
-  const editUX = installEditUXPack({ editor, editMode, transformModal });
   const vertexPicking = installVertexPicking({ editor, editMode, knifeTool, boxSelect, circleSelect });
-  const edgePicking = installEdgePicking({ editor, editMode, knifeTool, boxSelect, circleSelect });
+
+  // The advanced Edit Mode UX pack is intentionally NOT part of the startup
+  // dependency graph. Home must always boot even if a modeling-only module has a
+  // syntax/runtime regression, and expensive edge-picking code should not exist
+  // until the user actually enters Edit Mode.
+  let editUX = null;
+  let edgePicking = null;
+  let editUXLoad = null;
+
+  function ensureEditUX() {
+    if (editUX && edgePicking) return Promise.resolve({ editUX, edgePicking });
+    if (editUXLoad) return editUXLoad;
+
+    editUXLoad = Promise.all([
+      import('./runtime/edit-ux-pack.js'),
+      import('./runtime/edge-picking.js'),
+    ]).then(([uxModule, edgeModule]) => {
+      editUX = uxModule.installEditUXPack({ editor, editMode, transformModal });
+      edgePicking = edgeModule.installEdgePicking({ editor, editMode, knifeTool, boxSelect, circleSelect });
+      window.__gluestackEditUX = editUX;
+      window.__gluestackEdgePicking = edgePicking;
+      return { editUX, edgePicking };
+    }).catch((error) => {
+      editUXLoad = null;
+      console.error('[gluestack] Edit Mode UX failed to load', error);
+      editor.events.onStatus(`Edit UX: модуль не загрузился — ${error.message || error}`);
+      return null;
+    });
+
+    return editUXLoad;
+  }
+
+  // Every entry path (Tab, Modeling workspace, tutorial, external code) goes
+  // through editMode.enter(), so this is the single safe lazy-load boundary.
+  const baseEnterEditMode = editMode.enter.bind(editMode);
+  editMode.enter = (...args) => {
+    const entered = baseEnterEditMode(...args);
+    if (entered) queueMicrotask(() => { ensureEditUX(); });
+    return entered;
+  };
+
   const hud = document.querySelector('#transform-hud');
   const modalTools = new EditModalTools({
     editor,
@@ -65,8 +102,9 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
   window.__gluestackEditModalTools = modalTools;
   window.__gluestackUVModalTransform = uvModal;
   window.__gluestackVertexPicking = vertexPicking;
-  window.__gluestackEdgePicking = edgePicking;
-  window.__gluestackEditUX = editUX;
+  window.__gluestackEdgePicking = null;
+  window.__gluestackEditUX = null;
+  window.__gluestackEnsureEditUX = ensureEditUX;
 
   window.addEventListener('keydown', (event) => {
     if (window.__gluestackHome?.visible) return;
