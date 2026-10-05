@@ -310,10 +310,13 @@ Fixture-набор создан в `tests/fixtures/`; реальный PASS ос
 
 ## Selection / topology
 
-- [ ] Box Select.
-- [ ] Circle Select.
-- [ ] Select All / Invert / None в Object/Edit.
-- [ ] Select Linked.
+- [x] Box Select.
+- [x] Circle Select.
+- [x] Select All / Invert / None в Object/Edit.
+- [x] Select Linked.
+
+> Selection batch: общий Select menu, logical-edge/hidden-object fixes и 11 Node regressions PASS. Семантика и ограничения: [docs/MODELING_SELECTION.md](docs/MODELING_SELECTION.md). Browser/WebGL release QA остаётся открытым.
+
 - [ ] Edge Loop Select.
 - [ ] Edge Ring Select.
 - [ ] Select by Material.

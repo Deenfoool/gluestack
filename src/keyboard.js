@@ -35,8 +35,28 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
     'edit-loop-cut': 'loopCut',
   };
 
+  const selectionActions = {
+    'select-all': () => editMode.active ? editMode.selectAll() : selectionTools.objectSelectAll(),
+    'select-none': () => editMode.active ? editMode.deselectAll() : selectionTools.objectSelectNone(),
+    'select-invert': () => editMode.active ? selectionTools.editInvert() : selectionTools.objectInvert(),
+    'select-linked': () => { if (editMode.active) selectionTools.editLinked(); },
+    'select-box': () => boxSelect?.begin(),
+    'select-circle': () => circleSelect?.begin(),
+  };
+
   document.addEventListener('click', (event) => {
     const actionButton = event.target.closest?.('[data-action]');
+    const selectionAction = selectionActions[actionButton?.dataset.action];
+    if (selectionAction) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (modalTools.active || uvModal.active || knifeTool.active || transformModal.state) return;
+      boxSelect?.cancel();
+      circleSelect?.finish();
+      document.querySelectorAll('.menu[open]').forEach(menu => menu.removeAttribute('open'));
+      selectionAction();
+      return;
+    }
     const type = actionToModal[actionButton?.dataset.action];
     if (type && editMode.active) {
       event.preventDefault();
@@ -63,7 +83,7 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
     if (window.__gluestackHome?.visible) return;
 
     const target = event.target;
-    const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable;
+    const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target?.isContentEditable;
     if (typing) return;
 
     if (modalTools.active || uvModal.active) return;

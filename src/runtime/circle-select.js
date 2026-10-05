@@ -1,41 +1,11 @@
 import * as THREE from 'three';
-
-function projectWorld(editor, world, rect) {
-  const p = world.clone().project(editor.camera);
-  if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || p.z < -1 || p.z > 1) return null;
-  return {
-    x: rect.left + (p.x * 0.5 + 0.5) * rect.width,
-    y: rect.top + (-p.y * 0.5 + 0.5) * rect.height,
-  };
-}
+import { selectableObjects, objectCenter, projectEditVertices, segmentDistanceSquared } from './selection-geometry.js';
 
 function withinCircle(point, center, radius) {
   if (!point) return false;
   const dx = point.x - center.x;
   const dy = point.y - center.y;
   return dx * dx + dy * dy <= radius * radius;
-}
-
-function objectCenter(editor, object, rect) {
-  const box = new THREE.Box3().setFromObject(object);
-  if (box.isEmpty()) return null;
-  return projectWorld(editor, box.getCenter(new THREE.Vector3()), rect);
-}
-
-function selectableObjects(editor) {
-  const objects = [];
-  editor.modelRoot?.traverse?.((object) => {
-    if (object === editor.modelRoot || object.visible === false) return;
-    if (object.isMesh || object.isLine || object.isPoints || object.isLight || object.isCamera) objects.push(object);
-  });
-  return objects;
-}
-
-function editPoint(editMode, vertexId, rect) {
-  const vertex = editMode.vertices[vertexId];
-  if (!vertex) return null;
-  editMode.mesh.updateWorldMatrix(true, false);
-  return projectWorld(editMode.editor, vertex.position.clone().applyMatrix4(editMode.mesh.matrixWorld), rect);
 }
 
 function applyObjectCircle(editor, center, radius, subtract, rect) {
@@ -53,6 +23,7 @@ function applyObjectCircle(editor, center, radius, subtract, rect) {
 
 function applyEditCircle(editMode, center, radius, subtract, rect) {
   const target = editMode.currentSelectionSet();
+  const points = projectEditVertices(editMode, rect);
   let hits = 0;
   const mutate = (key) => {
     if (subtract) target.delete(key);
@@ -62,15 +33,14 @@ function applyEditCircle(editMode, center, radius, subtract, rect) {
 
   if (editMode.selectionMode === 'vertex') {
     editMode.vertices.forEach((_, vertexId) => {
-      if (withinCircle(editPoint(editMode, vertexId, rect), center, radius)) mutate(vertexId);
+      if (withinCircle(points[vertexId], center, radius)) mutate(vertexId);
     });
   } else if (editMode.selectionMode === 'edge') {
-    for (const edge of editMode.edges) {
-      const a = editPoint(editMode, edge.a, rect);
-      const b = editPoint(editMode, edge.b, rect);
+    for (const edge of editMode.logicalEdges) {
+      const a = points[edge.a];
+      const b = points[edge.b];
       if (!a || !b) continue;
-      const midpoint = { x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 };
-      if (withinCircle(midpoint, center, radius)) mutate(edge.key);
+      if (segmentDistanceSquared(center, a, b) <= radius * radius) mutate(edge.key);
     }
   } else {
     for (const group of editMode.faceGroups) {
@@ -82,7 +52,7 @@ function applyEditCircle(editMode, center, radius, subtract, rect) {
       let y = 0;
       let count = 0;
       for (const vertexId of vertices) {
-        const point = editPoint(editMode, vertexId, rect);
+        const point = points[vertexId];
         if (!point) continue;
         x += point.x;
         y += point.y;
@@ -114,6 +84,8 @@ export function installCircleSelect({ editor, editMode }) {
   let active = false;
   let painting = false;
   let subtract = false;
+  let pointerId = null;
+  let previousControls = null;
   let radius = 42;
   let center = { x: 0, y: 0 };
 
@@ -125,11 +97,14 @@ export function installCircleSelect({ editor, editMode }) {
   }
 
   function begin() {
-    if (active) return false;
+    if (active || document.body.classList.contains('gluestack-home-open')) return false;
+    editor.boxSelect?.cancel();
     active = true;
     painting = false;
     circle.hidden = false;
+    previousControls = { orbit: editor.orbit.enabled, transform: editor.transform?.enabled };
     editor.orbit.enabled = false;
+    if (editor.transform) editor.transform.enabled = false;
     const rect = canvas.getBoundingClientRect();
     center = { x: rect.left + rect.width * 0.5, y: rect.top + rect.height * 0.5 };
     render();
@@ -138,21 +113,27 @@ export function installCircleSelect({ editor, editMode }) {
   }
 
   function finish() {
+    if (!active) return;
     active = false;
     painting = false;
     circle.hidden = true;
-    editor.orbit.enabled = true;
+    editor.orbit.enabled = previousControls.orbit;
+    if (editor.transform) editor.transform.enabled = previousControls.transform;
+    pointerId = null;
     editor.events.onStatus(editMode.active ? `Edit Mode · ${editMode.selectionMode} Select` : 'Object Mode');
   }
 
   function applyAt(event) {
     const rect = canvas.getBoundingClientRect();
+    if (center.x < rect.left || center.x > rect.right || center.y < rect.top || center.y > rect.bottom) return;
     if (editMode.active) applyEditCircle(editMode, center, radius, subtract, rect);
     else applyObjectCircle(editor, center, radius, subtract, rect);
   }
 
   function onPointerMove(event) {
-    if (!active) return;
+    if (!active || (painting && event.pointerId !== pointerId)) return;
+    const rect = canvas.getBoundingClientRect();
+    circle.hidden = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
     center = { x: event.clientX, y: event.clientY };
     render();
     if (painting) {
@@ -171,12 +152,14 @@ export function installCircleSelect({ editor, editMode }) {
     center = { x: event.clientX, y: event.clientY };
     subtract = event.ctrlKey || event.metaKey;
     painting = true;
+    pointerId = event.pointerId;
+    circle.hidden = false;
     render();
     applyAt(event);
   }
 
   function onPointerUp(event) {
-    if (!active || !painting) return;
+    if (!active || !painting || event.pointerId !== pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     painting = false;
@@ -195,6 +178,12 @@ export function installCircleSelect({ editor, editMode }) {
   window.addEventListener('pointermove', onPointerMove, true);
   window.addEventListener('pointerup', onPointerUp, true);
   canvas.addEventListener('wheel', onWheel, { capture: true, passive: false });
+
+  window.addEventListener('pointercancel', finish);
+  window.addEventListener('blur', finish);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) finish(); });
+
+  new window.MutationObserver(() => { if (document.body.classList.contains('gluestack-home-open')) finish(); }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
   const api = { begin, finish, get active() { return active; }, get radius() { return radius; } };
   editor.circleSelect = api;

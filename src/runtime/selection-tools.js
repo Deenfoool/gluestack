@@ -1,11 +1,4 @@
-function selectableObjects(editor) {
-  const objects = [];
-  editor.modelRoot?.traverse?.((object) => {
-    if (object === editor.modelRoot || !object.parent || object.visible === false) return;
-    objects.push(object);
-  });
-  return objects;
-}
+import { selectableObjects } from './selection-geometry.js';
 
 function refreshEdit(editMode) {
   editMode.refreshOverlay();
@@ -15,7 +8,7 @@ function refreshEdit(editMode) {
 
 function editUniverse(editMode) {
   if (editMode.selectionMode === 'vertex') return editMode.vertices.map((_, index) => index);
-  if (editMode.selectionMode === 'edge') return editMode.edges.map((edge) => edge.key);
+  if (editMode.selectionMode === 'edge') return editMode.logicalEdges.map((edge) => edge.key);
   return editMode.faceGroups.map((group) => group.id);
 }
 
@@ -45,8 +38,8 @@ function connectedVertices(editMode, seeds) {
 
   const visited = new Set(seeds);
   const queue = [...seeds];
-  while (queue.length) {
-    const vertex = queue.shift();
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const vertex = queue[cursor];
     for (const next of adjacency.get(vertex) ?? []) {
       if (visited.has(next)) continue;
       visited.add(next);
@@ -70,7 +63,7 @@ function selectLinked(editMode) {
   if (editMode.selectionMode === 'vertex') {
     linked.forEach((vertex) => target.add(vertex));
   } else if (editMode.selectionMode === 'edge') {
-    for (const edge of editMode.edges) {
+    for (const edge of editMode.logicalEdges) {
       if (linked.has(edge.a) && linked.has(edge.b)) target.add(edge.key);
     }
   } else {
