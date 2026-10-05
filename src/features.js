@@ -11,7 +11,7 @@ async function loadAndInstall(editor, name, loader, installer) {
   }
 }
 
-async function installFeaturesOnce({ editor, editMode, knifeTool, requestNumber }) {
+async function installFeaturesOnce({ editor, editMode, knifeTool }) {
   const i18n = await loadAndInstall(editor, 'Localization', () => import('./runtime/i18n.js'), ({ installI18n }) => installI18n({ editor }));
   const resources = await loadAndInstall(editor, 'Resource ownership', () => import('./runtime/resource-ownership.js'), ({ installResourceOwnership }) => installResourceOwnership(editor));
   const transformIntegrity = await loadAndInstall(editor, 'Transform integrity', () => import('./runtime/transform-integrity.js'), ({ installTransformIntegrity }) => installTransformIntegrity(editor));
@@ -32,7 +32,7 @@ async function installFeaturesOnce({ editor, editMode, knifeTool, requestNumber 
     }
   }
 
-  const uv = await loadAndInstall(editor, 'UV Editing', () => import('./uv/integration.js'), ({ installUVWorkspace }) => installUVWorkspace({ editor, editMode, knifeTool, requestNumber }));
+  const uv = await loadAndInstall(editor, 'UV Editing', () => import('./uv/integration.js'), ({ installUVWorkspace }) => installUVWorkspace({ editor, editMode, knifeTool }));
   const uvWorkspace = () => document.querySelector('#uv-workspace');
   const advancedUV = await loadAndInstall(editor, 'Advanced UV', () => import('./uv/advanced.js'), ({ installAdvancedUV }) => installAdvancedUV({ controller: uv?.controller, workspace: uvWorkspace(), editor }));
   const smartIslands = await loadAndInstall(editor, 'Smart UV islands', () => import('./uv/smart-islands.js'), ({ installSmartIslands }) => installSmartIslands({ controller: uv?.controller, workspace: uvWorkspace() }));
