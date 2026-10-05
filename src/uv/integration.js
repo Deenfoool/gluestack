@@ -11,7 +11,11 @@ export function installUVWorkspace({ editor, editMode, knifeTool }) {
   const modelWorkspace = document.querySelector('main.workspace');
   const viewport = document.querySelector('#viewport');
   const originalViewportParent = viewport.parentElement;
-  const uvTab = [...document.querySelectorAll('.workspace-tab')].find((item) => item.textContent.trim() === 'UV Editing');
+  const uvTab = [...document.querySelectorAll('.workspace-tab')].find((item) => (
+    item.dataset.workspace === 'uv'
+    || item.textContent.trim() === 'UV Editing'
+    || item.textContent.trim() === 'UV-развёртка'
+  ));
   if (!modelWorkspace || !viewport || !uvTab) return null;
 
   modelWorkspace.id = 'model-workspace';
