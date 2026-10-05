@@ -1,84 +1,153 @@
-function faceMaterialIndex(editMode, group) {
-  const triangleIndex = group?.triangles?.[0];
-  return triangleIndex === undefined ? null : editMode.triangles[triangleIndex]?.materialIndex ?? 0;
-}
-
-function boundaryKeys(group) {
-  return (group?.boundary ?? []).map((edge) => edge.key);
-}
-
-function oppositeEdge(group, edgeKey) {
-  const boundary = group?.boundary ?? [];
-  if (boundary.length !== 4) return null;
-  const current = boundary.find((edge) => edge.key === edgeKey);
-  if (!current) return null;
-  return boundary.find((edge) => (
-    edge.key !== current.key
-    && edge.a !== current.a
-    && edge.a !== current.b
-    && edge.b !== current.a
-    && edge.b !== current.b
-  )) ?? null;
-}
-
-function edgeToGroups(editMode) {
-  const map = new Map();
-  for (const group of editMode.faceGroups) {
-    for (const key of boundaryKeys(group)) {
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(group);
+function selectionTopology(editMode) {
+  const edges = new Map(editMode.logicalEdges.map(edge => [edge.key, edge]));
+  const byEdge = new Map();
+  const byVertex = new Map();
+  const quads = new Set();
+  for (const edge of edges.values()) {
+    for (const vertex of [edge.a, edge.b]) {
+      if (!byVertex.has(vertex)) byVertex.set(vertex, []);
+      byVertex.get(vertex).push(edge);
     }
   }
-  return map;
+  for (const group of editMode.faceGroups) {
+    const boundary = group.boundary ?? [];
+    const degree = new Map();
+    const keys = new Set();
+    for (const edge of boundary) {
+      if (!byEdge.has(edge.key)) byEdge.set(edge.key, []);
+      byEdge.get(edge.key).push(group);
+      keys.add(edge.key);
+      for (const vertex of [edge.a, edge.b]) degree.set(vertex, (degree.get(vertex) ?? 0) + 1);
+    }
+    if (boundary.length === 4 && keys.size === 4 && degree.size === 4
+      && [...degree.values()].every(value => value === 2)
+      && boundary.every(edge => edge.a !== edge.b && edges.has(edge.key))) quads.add(group);
+  }
+  return { edges, byEdge, byVertex, quads };
 }
 
-function collectRing(editMode, seedKey) {
-  const byEdge = edgeToGroups(editMode);
-  const selected = new Set([seedKey]);
-  const queue = [{ edgeKey: seedKey, fromGroup: null }];
-  const visitedSteps = new Set();
-
-  while (queue.length) {
-    const step = queue.shift();
-    const groups = byEdge.get(step.edgeKey) ?? [];
+function manifoldFan(topology, incident) {
+  const neighbors = new Map();
+  for (const edge of incident) {
+    const groups = topology.byEdge.get(edge.key) ?? [];
+    if (!groups.length || groups.length > 2 || groups.some(group => !topology.quads.has(group))) return false;
     for (const group of groups) {
-      if (step.fromGroup === group.id) continue;
-      const stepKey = `${step.edgeKey}|${group.id}`;
-      if (visitedSteps.has(stepKey)) continue;
-      visitedSteps.add(stepKey);
-      const opposite = oppositeEdge(group, step.edgeKey);
-      if (!opposite) continue;
+      if (!neighbors.has(group)) neighbors.set(group, new Set());
+      groups.forEach(next => neighbors.get(group).add(next));
+    }
+  }
+  // Reject disconnected surface fans touching at a single vertex.
+  if (!neighbors.size) return false;
+  const first = neighbors.keys().next().value;
+  const visited = new Set([first]);
+  const queue = [first];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    for (const next of neighbors.get(queue[cursor])) {
+      if (visited.has(next)) continue;
+      visited.add(next);
+      queue.push(next);
+    }
+  }
+  return visited.size === neighbors.size;
+}
+
+function loopContinuation(topology, edge, vertex) {
+  const incident = topology.byVertex.get(vertex) ?? [];
+  const groups = topology.byEdge.get(edge.key) ?? [];
+  if (groups.length !== 1 && (groups.length !== 2 || incident.length !== 4)) return null;
+  if (!manifoldFan(topology, incident)) return null;
+  if (groups.length === 1) {
+    const boundary = incident.filter(candidate => topology.byEdge.get(candidate.key)?.length === 1);
+    return boundary.length === 2 ? boundary.find(candidate => candidate.key !== edge.key) : null;
+  }
+  // A regular quad vertex has four incident edges. The opposite edge
+  // shares the vertex but neither of the incoming edge's faces.
+  if (groups.length !== 2 || incident.length !== 4) return null;
+  if (incident.some(candidate => topology.byEdge.get(candidate.key)?.length !== 2)) return null;
+  const candidates = incident.filter(candidate => candidate.key !== edge.key
+    && !topology.byEdge.get(candidate.key).some(group => groups.includes(group)));
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function collectLoops(topology, seeds) {
+  const selected = new Set(seeds);
+  const queue = [];
+  for (const key of seeds) {
+    const edge = topology.edges.get(key);
+    queue.push({ edge, vertex: edge.a }, { edge, vertex: edge.b });
+  }
+  const visited = new Set();
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const { edge, vertex } = queue[cursor];
+    const step = `${edge.key}|${vertex}`;
+    if (visited.has(step)) continue;
+    visited.add(step);
+    const next = loopContinuation(topology, edge, vertex);
+    if (!next) continue;
+    selected.add(next.key);
+    queue.push({ edge: next, vertex: next.a === vertex ? next.b : next.a });
+  }
+  return selected;
+}
+
+function collectRings(topology, seeds) {
+  const selected = new Set(seeds);
+  const queue = [...seeds];
+  const visited = new Set();
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const key = queue[cursor];
+    if (visited.has(key)) continue;
+    visited.add(key);
+    const groups = topology.byEdge.get(key) ?? [];
+    if (groups.length > 2) continue;
+    const current = topology.edges.get(key);
+    for (const group of groups) {
+      if (!topology.quads.has(group)) continue;
+      const opposite = group.boundary.find(edge => edge.a !== current.a && edge.a !== current.b
+        && edge.b !== current.a && edge.b !== current.b);
+      if (!opposite || topology.byEdge.get(opposite.key)?.length > 2) continue;
       selected.add(opposite.key);
-      queue.push({ edgeKey: opposite.key, fromGroup: group.id });
+      queue.push(opposite.key);
     }
   }
   return selected;
 }
 
-function selectEdgeRing(editMode) {
+function selectEdgeChain(editMode, kind) {
+  const label = kind === 'loop' ? 'Edge Loop' : 'Edge Ring';
   if (!editMode.active || editMode.selectionMode !== 'edge') {
-    editMode.status('Edge Ring: переключитесь в Edge Select');
+    editMode.status(`${label}: переключитесь в Edge Select`);
     return false;
   }
   if (!editMode.selectedEdges.size) {
-    editMode.status('Edge Ring: сначала выберите ребро');
+    editMode.status(`${label}: сначала выберите ребро`);
     return false;
   }
-
-  const result = new Set();
-  for (const seed of editMode.selectedEdges) collectRing(editMode, seed).forEach((key) => result.add(key));
-  if (result.size === editMode.selectedEdges.size && [...result].every((key) => editMode.selectedEdges.has(key))) {
-    editMode.status('Edge Ring: для выбранного ребра нет однозначной quad-ring цепочки');
+  const topology = selectionTopology(editMode);
+  if ([...editMode.selectedEdges].some(key => !topology.edges.has(key))) {
+    editMode.status(`${label}: выделение содержит устаревшее или внутреннее ребро`);
     return false;
   }
-
+  const result = kind === 'loop' ? collectLoops(topology, editMode.selectedEdges) : collectRings(topology, editMode.selectedEdges);
+  if (result.size === editMode.selectedEdges.size) {
+    editMode.status(`${label}: нет однозначного продолжения по quad-топологии`);
+    return false;
+  }
   editMode.selectedEdges.clear();
-  result.forEach((key) => editMode.selectedEdges.add(key));
+  result.forEach(key => editMode.selectedEdges.add(key));
+  refreshSelection(editMode);
+  editMode.status(`${label} · ${result.size} edge(s)`);
+  return true;
+}
+
+function refreshSelection(editMode) {
   editMode.refreshOverlay();
   editMode.updatePivot();
   editMode.emitChange();
-  editMode.status(`Edge Ring · ${result.size} edge(s)`);
-  return true;
+}
+
+function materialSlots(editMode, group) {
+  return new Set((group?.triangles ?? []).map(index => editMode.triangles[index]?.materialIndex ?? 0));
 }
 
 function selectByMaterial(editMode) {
@@ -86,29 +155,27 @@ function selectByMaterial(editMode) {
     editMode.status('Select by Material: переключитесь в Face Select');
     return false;
   }
-  const seedId = editMode.selectedFaces.values().next().value;
-  if (seedId === undefined) {
+  const seeds = editMode.faceGroups.filter(group => editMode.selectedFaces.has(group.id));
+  if (!seeds.length) {
     editMode.status('Select by Material: сначала выберите грань');
     return false;
   }
-  const materialIndex = faceMaterialIndex(editMode, editMode.faceGroups[seedId]);
-  if (materialIndex === null) return false;
-
+  const slots = new Set();
+  for (const group of seeds) materialSlots(editMode, group).forEach(slot => slots.add(slot));
   editMode.selectedFaces.clear();
   for (const group of editMode.faceGroups) {
-    if (faceMaterialIndex(editMode, group) === materialIndex) editMode.selectedFaces.add(group.id);
+    if ([...materialSlots(editMode, group)].some(slot => slots.has(slot))) editMode.selectedFaces.add(group.id);
   }
-  editMode.refreshOverlay();
-  editMode.updatePivot();
-  editMode.emitChange();
-  editMode.status(`Select by Material · slot ${materialIndex} · ${editMode.selectedFaces.size} face(s)`);
+  refreshSelection(editMode);
+  editMode.status(`Select by Material · slots ${[...slots].join(', ')} · ${editMode.selectedFaces.size} face(s)`);
   return true;
 }
 
 export function installAdvancedEditSelection({ editMode }) {
   if (!editMode || editMode.advancedSelection) return editMode?.advancedSelection ?? null;
   const api = {
-    selectEdgeRing: () => selectEdgeRing(editMode),
+    selectEdgeLoop: () => selectEdgeChain(editMode, 'loop'),
+    selectEdgeRing: () => selectEdgeChain(editMode, 'ring'),
     selectByMaterial: () => selectByMaterial(editMode),
   };
   editMode.advancedSelection = api;

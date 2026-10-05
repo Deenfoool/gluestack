@@ -164,3 +164,21 @@ test('Select menu routes Object/Edit actions; Escape/Enter finish tools; form co
   action('select-none'); assert.equal(editMode.selectedEdges.size, 0);
   const select = document.createElement('select'); document.body.append(select); key('KeyB', select); assert.equal(box.active, false);
 });
+
+
+test('Edge Loop / Ring / Material menus and shortcuts route to the installed topology tools', () => {
+  const { editor, editMode } = setup('edge');
+  for (const key of ['HTMLInputElement', 'HTMLTextAreaElement', 'HTMLSelectElement']) globalThis[key] = window[key];
+  globalThis.requestAnimationFrame = () => 1; globalThis.cancelAnimationFrame = () => {};
+  editMode.mesh = new THREE.Mesh(new THREE.TorusGeometry(3,1,7,9)); editMode.loadTopology();
+  bindKeyboard({ editor, editMode, knifeTool: { active: false }, transformModal: { state: null, handleKey: () => false } });
+  const initial = editMode.logicalEdges[0].key;
+  function action(name) { const button = document.createElement('button'); button.dataset.action=name; document.body.append(button); button.click(); }
+  function key(code,options) { window.dispatchEvent(new window.KeyboardEvent('keydown',{code,bubbles:true,cancelable:true,...options})); }
+  editMode.selectedEdges=new Set([initial]); action('select-edge-loop'); const loop=new Set(editMode.selectedEdges); assert.ok(loop.size>1);
+  editMode.selectedEdges=new Set([initial]); key('KeyL',{ctrlKey:true,altKey:true}); assert.deepEqual(editMode.selectedEdges,loop);
+  editMode.selectedEdges=new Set([initial]); action('select-edge-ring'); const ring=new Set(editMode.selectedEdges); assert.ok(ring.size>1);
+  editMode.selectedEdges=new Set([initial]); key('KeyR',{metaKey:true,altKey:true}); assert.deepEqual(editMode.selectedEdges,ring);
+  editMode.selectionMode='face'; editMode.selectedFaces=new Set([0]); action('select-material'); assert.equal(editMode.selectedFaces.size,63);
+  editMode.selectedFaces=new Set([0]); key('KeyM',{shiftKey:true}); assert.equal(editMode.selectedFaces.size,63);
+});

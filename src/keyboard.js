@@ -40,6 +40,9 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
     'select-none': () => editMode.active ? editMode.deselectAll() : selectionTools.objectSelectNone(),
     'select-invert': () => editMode.active ? selectionTools.editInvert() : selectionTools.objectInvert(),
     'select-linked': () => { if (editMode.active) selectionTools.editLinked(); },
+    'select-edge-loop': () => advancedSelection.selectEdgeLoop(),
+    'select-edge-ring': () => advancedSelection.selectEdgeRing(),
+    'select-material': () => advancedSelection.selectByMaterial(),
     'select-box': () => boxSelect?.begin(),
     'select-circle': () => circleSelect?.begin(),
   };
@@ -153,6 +156,7 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
       if (event.code === 'KeyA' && !commandKey) { event.preventDefault(); editMode.selectAll(); return; }
       if (commandKey && event.code === 'KeyI') { event.preventDefault(); selectionTools.editInvert(); return; }
       if (!commandKey && !event.altKey && event.code === 'KeyL') { event.preventDefault(); selectionTools.editLinked(); return; }
+      if (commandKey && event.altKey && event.code === 'KeyL') { event.preventDefault(); advancedSelection.selectEdgeLoop(); return; }
       if (commandKey && event.altKey && event.code === 'KeyR') { event.preventDefault(); advancedSelection.selectEdgeRing(); return; }
       if (event.shiftKey && !commandKey && !event.altKey && event.code === 'KeyM') { event.preventDefault(); advancedSelection.selectByMaterial(); return; }
       if (!commandKey && !event.altKey && event.code === 'KeyB') { event.preventDefault(); boxSelect?.begin(); return; }
