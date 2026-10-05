@@ -164,6 +164,7 @@ export function installProjects({ editor, editMode, knifeTool }) {
 
   document.addEventListener('change', (event) => {
     if (event.target === input) return;
+    if (event.target.closest?.('[data-gluestack-settings]')) return;
     schedule('ui-change');
   }, true);
   document.addEventListener('pointerup', (event) => {
