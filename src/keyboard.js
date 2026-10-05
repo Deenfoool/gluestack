@@ -5,12 +5,14 @@ import { installSelectionTools } from './runtime/selection-tools.js';
 import { installBoxSelect } from './runtime/box-select.js';
 import { installCircleSelect } from './runtime/circle-select.js';
 import { installAdvancedEditSelection } from './runtime/edit-selection-advanced.js';
+import { installVertexPicking } from './runtime/vertex-picking.js';
 
 export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snapButton, openAddMenu }) {
   const selectionTools = installSelectionTools({ editor, editMode });
   const boxSelect = installBoxSelect({ editor, editMode });
   const circleSelect = installCircleSelect({ editor, editMode });
   const advancedSelection = installAdvancedEditSelection({ editMode });
+  const vertexPicking = installVertexPicking({ editor, editMode, knifeTool, boxSelect, circleSelect });
   const hud = document.querySelector('#transform-hud');
   const modalTools = new EditModalTools({
     editor,
@@ -55,6 +57,7 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
 
   window.__gluestackEditModalTools = modalTools;
   window.__gluestackUVModalTransform = uvModal;
+  window.__gluestackVertexPicking = vertexPicking;
 
   window.addEventListener('keydown', (event) => {
     if (window.__gluestackHome?.visible) return;
