@@ -10,8 +10,14 @@ const TYPES = Object.freeze({
   loopCut: { label: 'Loop Cut', history: 'Loop cut' },
 });
 
+const POSITION_EPSILON = 1e-5;
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function positionKey(point) {
+  return `${Math.round(point.x / POSITION_EPSILON)}:${Math.round(point.y / POSITION_EPSILON)}:${Math.round(point.z / POSITION_EPSILON)}`;
 }
 
 function cloneSelection(controller) {
@@ -165,7 +171,7 @@ export class EditModalTools {
     const baseSelectedPositions = selectedIds
       .map((id) => this.editMode.vertices[id]?.position?.clone())
       .filter(Boolean);
-    const baseVertexCount = this.editMode.vertices.length;
+    const basePositionKeys = new Set(this.editMode.vertices.map((vertex) => positionKey(vertex.position)));
     const baseGeometry = this.editMode.mesh.geometry.clone();
     const orbitEnabled = this.editor.orbit.enabled;
     const baseValues = type === 'extrude'
@@ -192,7 +198,7 @@ export class EditModalTools {
       type,
       mesh: this.editMode.mesh,
       baseGeometry,
-      baseVertexCount,
+      basePositionKeys,
       baseSelectedPositions,
       baseCenter: average(baseSelectedPositions),
       baseNormal: normal,
@@ -360,10 +366,19 @@ export class EditModalTools {
     const s = this.state;
     if (!s) return '';
     if (s.numeric) return s.numeric;
-    if (s.type === 'extrude') return `Distance ${s.values.distance.toFixed(3)}`;
-    if (s.type === 'inset') return `Factor ${s.values.factor.toFixed(3)}`;
-    if (s.type === 'loopCut') return `Factor ${s.values.factor.toFixed(3)}`;
-    return `Factor ${s.values.factor.toFixed(3)} · Depth ${s.values.depth.toFixed(3)}`;
+    const en = language() === 'en';
+    if (s.type === 'extrude') return `${en ? 'Distance' : 'Расстояние'} ${s.values.distance.toFixed(3)}`;
+    if (s.type === 'inset' || s.type === 'loopCut') return `${en ? 'Factor' : 'Коэффициент'} ${s.values.factor.toFixed(3)}`;
+    return `${en ? 'Factor' : 'Коэффициент'} ${s.values.factor.toFixed(3)} · ${en ? 'Depth' : 'Глубина'} ${s.values.depth.toFixed(3)}`;
+  }
+
+  previewPoints() {
+    const s = this.state;
+    if (!s?.previewApplied) return [];
+    return this.editMode.vertices
+      .filter((vertex) => !s.basePositionKeys.has(positionKey(vertex.position)))
+      .slice(0, 260)
+      .map((vertex) => vertex.position);
   }
 
   renderVisuals() {
@@ -390,18 +405,15 @@ export class EditModalTools {
       }
     }
 
-    if (s.previewApplied) {
-      const newPoints = this.editMode.vertices.slice(s.baseVertexCount, s.baseVertexCount + 260).map((vertex) => vertex.position);
-      for (const point of newPoints) {
-        const screen = this.project(point);
-        if (!screen?.visible) continue;
-        const base = nearest(point, basePoints);
-        if (base) {
-          const baseScreen = this.project(base);
-          if (baseScreen?.visible) svg += line(baseScreen.x, baseScreen.y, screen.x, screen.y, { color: '#f59b23', opacity: 0.34, dash: '3 4' });
-        }
-        svg += circle(screen.x, screen.y, { radius: s.type === 'loopCut' ? 4.5 : 4, color: '#f59b23', fill: '#f59b23', opacity: 0.92 });
+    for (const point of this.previewPoints()) {
+      const screen = this.project(point);
+      if (!screen?.visible) continue;
+      const base = nearest(point, basePoints);
+      if (base) {
+        const baseScreen = this.project(base);
+        if (baseScreen?.visible) svg += line(baseScreen.x, baseScreen.y, screen.x, screen.y, { color: '#f59b23', opacity: 0.34, dash: '3 4' });
       }
+      svg += circle(screen.x, screen.y, { radius: s.type === 'loopCut' ? 4.5 : 4, color: '#f59b23', fill: '#f59b23', opacity: 0.92 });
     }
 
     const en = language() === 'en';
