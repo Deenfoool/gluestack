@@ -155,8 +155,45 @@ async function bootstrapOptionalFeatures() {
   }
 }
 
+function snapshotSelectedTransform() {
+  const object = !editMode.active ? editor.selected : null;
+  if (!object || object === editor.modelRoot) return null;
+  return {
+    object,
+    position: object.position.clone(),
+    quaternion: object.quaternion.clone(),
+    scale: object.scale.clone(),
+  };
+}
+
+function restoreSelectedTransform(snapshot) {
+  if (!snapshot || editor.selected !== snapshot.object || !snapshot.object.parent) return;
+  snapshot.object.position.copy(snapshot.position);
+  snapshot.object.quaternion.copy(snapshot.quaternion);
+  snapshot.object.scale.copy(snapshot.scale);
+  snapshot.object.updateMatrix();
+  snapshot.object.updateMatrixWorld(true);
+  editor.updateSelectionBoxes();
+}
+
 function setTransformMode(mode) {
+  // Switching tools is UI state, not a scene edit. Preserve the complete current
+  // object transform around the switch so Rotate can never reset Scale, Scale can
+  // never reset Rotation, and Move can never reset either one.
+  if (editor.transform.dragging && typeof editor.transform.pointerUp === 'function') {
+    editor.transform.pointerUp(null);
+  }
+  const snapshot = snapshotSelectedTransform();
   editor.setTransformMode(mode);
+  restoreSelectedTransform(snapshot);
+
+  // Some TransformControls/UI listeners complete after the click handler. Re-assert
+  // the exact same transform once after the current task and once on the next frame.
+  if (snapshot) {
+    queueMicrotask(() => restoreSelectedTransform(snapshot));
+    requestAnimationFrame(() => restoreSelectedTransform(snapshot));
+  }
+
   $$('[data-transform-mode]').forEach((button) => {
     button.classList.toggle('active', button.dataset.transformMode === mode);
   });
@@ -266,7 +303,7 @@ $$('[data-primitive]').forEach((button) => {
 });
 $$('[data-transform-mode]').forEach((button) => {
   button.addEventListener('click', () => {
-    if (transformModal.state) transformModal.commit();
+    if (transformModal.state) transformModal.finishForModeSwitch();
     knifeTool.cancel(true);
     setTransformMode(button.dataset.transformMode);
   });
