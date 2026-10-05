@@ -33,8 +33,6 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
     'edit-loop-cut': 'loopCut',
   };
 
-  // Intercept modeling buttons before legacy handlers in main.js. Modeling
-  // operations are modal mouse drags now and never open window.prompt().
   document.addEventListener('click', (event) => {
     const actionButton = event.target.closest?.('[data-action]');
     const type = actionToModal[actionButton?.dataset.action];
@@ -59,12 +57,12 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
   window.__gluestackUVModalTransform = uvModal;
 
   window.addEventListener('keydown', (event) => {
+    if (window.__gluestackHome?.visible) return;
+
     const target = event.target;
     const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable;
     if (typing) return;
 
-    // Active modal tools own input until they are confirmed/cancelled. Their
-    // capture-phase handlers process numeric input, Enter and Esc.
     if (modalTools.active || uvModal.active) return;
 
     if (boxSelect?.active) {
