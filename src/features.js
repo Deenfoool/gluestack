@@ -52,8 +52,28 @@ function makeHomeImporter({ editor, projects, importer }) {
 }
 
 async function installFeaturesOnce({ editor, editMode, knifeTool }) {
+  // Home-critical modules load first. The static startup Home in index.html is
+  // already visible before JS; these modules replace it with the interactive Home
+  // without making the editor visible in between.
   const i18n = await loadAndInstall(editor, 'Localization', () => import('./runtime/i18n.js'), ({ installI18n }) => installI18n({ editor }));
+  const importer = await loadAndInstall(editor, 'GLTF importer', () => import('./runtime/importer.js'), ({ installImportPipeline }) => installImportPipeline({ editor, editMode, knifeTool }));
+  const projects = await loadAndInstall(editor, 'Projects', () => import('./projects/integration.js'), ({ installProjects }) => installProjects({ editor, editMode, knifeTool }));
+  const settings = await loadAndInstall(editor, 'Settings', () => import('./runtime/settings.js'), ({ installSettings }) => installSettings({ editor, projects, i18n }));
+  installProjectDelete(projects);
+  const homeImporter = makeHomeImporter({ editor, projects, importer });
+  const home = await loadAndInstall(editor, 'Home', () => import('./runtime/home.js'), ({ installHome }) => installHome({
+    editor,
+    projects,
+    settings,
+    i18n,
+    importer: homeImporter,
+    editMode,
+    knifeTool,
+  }));
+  const homeReturn = await loadAndInstall(editor, 'Home navigation', () => import('./runtime/home-return.js'), ({ installHomeReturn }) => installHomeReturn({ home, i18n }));
   const icons8 = await loadAndInstall(editor, 'Icons8 tool icons', () => import('./runtime/icons8-tools.js'), ({ installIcons8Tools }) => installIcons8Tools());
+
+  // Heavy editor subsystems continue booting behind Home.
   const resources = await loadAndInstall(editor, 'Resource ownership', () => import('./runtime/resource-ownership.js'), ({ installResourceOwnership }) => installResourceOwnership(editor));
   const transformIntegrity = await loadAndInstall(editor, 'Transform integrity', () => import('./runtime/transform-integrity.js'), ({ installTransformIntegrity }) => installTransformIntegrity(editor));
   const animations = await loadAndInstall(editor, 'Animations', () => import('./runtime/animations.js'), ({ installAnimations }) => installAnimations(editor));
@@ -62,7 +82,6 @@ async function installFeaturesOnce({ editor, editMode, knifeTool }) {
   const exportSelected = await loadAndInstall(editor, 'Export Selected', () => import('./runtime/export-selected.js'), ({ installExportSelected }) => installExportSelected({ editor }));
   const animationEditor = await loadAndInstall(editor, 'Animation editor', () => import('./runtime/animation-editor.js'), ({ installAnimationEditor }) => installAnimationEditor(editor));
   const dopeSheet = await loadAndInstall(editor, 'Dope Sheet', () => import('./runtime/dope-sheet.js'), ({ installDopeSheet }) => installDopeSheet(editor));
-  const importer = await loadAndInstall(editor, 'GLTF importer', () => import('./runtime/importer.js'), ({ installImportPipeline }) => installImportPipeline({ editor, editMode, knifeTool }));
 
   let modifierStack = editor.modifierStack ?? null;
   if (!modifierStack && editor.modifierStackReady) {
@@ -82,21 +101,6 @@ async function installFeaturesOnce({ editor, editMode, knifeTool }) {
   const uvIslandTools = await loadAndInstall(editor, 'UV island tools', () => import('./uv/island-tools.js'), ({ installUVIslandTools }) => installUVIslandTools({ controller: uv?.controller, workspace: uvWorkspace() }));
 
   const materials = await loadAndInstall(editor, 'Materials', () => import('./materials/integration.js'), ({ installMaterialPanel }) => installMaterialPanel({ editor }));
-  const projects = await loadAndInstall(editor, 'Projects', () => import('./projects/integration.js'), ({ installProjects }) => installProjects({ editor, editMode, knifeTool }));
-  const settings = await loadAndInstall(editor, 'Settings', () => import('./runtime/settings.js'), ({ installSettings }) => installSettings({ editor, projects, i18n }));
-  installProjectDelete(projects);
-  const homeImporter = makeHomeImporter({ editor, projects, importer });
-  const home = await loadAndInstall(editor, 'Home', () => import('./runtime/home.js'), ({ installHome }) => installHome({
-    editor,
-    projects,
-    settings,
-    i18n,
-    importer: homeImporter,
-    editMode,
-    knifeTool,
-  }));
-  const homeReturn = await loadAndInstall(editor, 'Home navigation', () => import('./runtime/home-return.js'), ({ installHomeReturn }) => installHomeReturn({ home, i18n }));
-
   const gameReady = await loadAndInstall(editor, 'Game Ready', () => import('./game-ready/integration.js'), ({ installGameReady }) => installGameReady({ editor }));
   const gameReadyValidator = await loadAndInstall(editor, 'Game Ready validator v2', () => import('./game-ready/validator-v2.js'), ({ installGameReadyValidatorV2 }) => installGameReadyValidatorV2({ editor, gameReady }));
   const lodPolicy = await loadAndInstall(editor, 'LOD policy', () => import('./game-ready/lod-policy.js'), ({ installLODPolicy }) => installLODPolicy({ editor, gameReady }));
