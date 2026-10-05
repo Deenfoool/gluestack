@@ -38,6 +38,7 @@ export function installVertexPicking({ editor, editMode, knifeTool = null, boxSe
   const ndc = new THREE.Vector3();
   let hovered = null;
   let pressed = null;
+  let backgroundPress = null;
   let hoverFrame = 0;
   let pendingPointer = null;
 
@@ -157,23 +158,25 @@ export function installVertexPicking({ editor, editMode, knifeTool = null, boxSe
   canvas.addEventListener('pointermove', scheduleHover, { capture: true });
   canvas.addEventListener('pointerleave', () => {
     pressed = null;
+    backgroundPress = null;
     hideHover();
   }, { capture: true });
 
   canvas.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || blocked()) return;
     const candidate = pick(event.clientX, event.clientY);
+    backgroundPress = {
+      x: event.clientX,
+      y: event.clientY,
+      additive: event.shiftKey,
+    };
     if (!candidate) return;
 
-    // Component selection has priority over TransformControls when the cursor is
-    // actually inside a vertex hit radius. The gizmo remains usable on its handles
-    // outside that small screen-space circle.
     pressed = {
       index: candidate.index,
       x: event.clientX,
       y: event.clientY,
       additive: event.shiftKey,
-      pointerId: event.pointerId,
     };
     renderHover(candidate);
     event.preventDefault();
@@ -181,25 +184,42 @@ export function installVertexPicking({ editor, editMode, knifeTool = null, boxSe
   }, { capture: true });
 
   canvas.addEventListener('pointerup', (event) => {
-    if (!pressed || event.button !== 0) return;
-    const active = pressed;
-    pressed = null;
+    if (event.button !== 0 || (!pressed && !backgroundPress)) return;
+
+    if (pressed) {
+      const active = pressed;
+      pressed = null;
+      backgroundPress = null;
+      const distance = Math.hypot(event.clientX - active.x, event.clientY - active.y);
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      editor.pointerStart = null;
+
+      if (distance <= CLICK_SLOP_PX && editMode.active && editMode.selectionMode === 'vertex') {
+        editMode.selectComponent(active.index, active.additive || event.shiftKey);
+        renderHover(pick(event.clientX, event.clientY));
+      } else {
+        hideHover();
+      }
+      return;
+    }
+
+    const active = backgroundPress;
+    backgroundPress = null;
     const distance = Math.hypot(event.clientX - active.x, event.clientY - active.y);
+    if (distance > CLICK_SLOP_PX || blocked() || editor.transform.axis) return;
+
     event.preventDefault();
     event.stopImmediatePropagation();
     editor.pointerStart = null;
-
-    if (distance <= CLICK_SLOP_PX && editMode.active && editMode.selectionMode === 'vertex') {
-      editMode.selectComponent(active.index, active.additive || event.shiftKey);
-      const candidate = pick(event.clientX, event.clientY);
-      renderHover(candidate);
-    } else {
-      hideHover();
-    }
+    const candidate = pick(event.clientX, event.clientY);
+    editMode.selectComponent(candidate?.index ?? null, active.additive || event.shiftKey);
+    renderHover(candidate);
   }, { capture: true });
 
   window.addEventListener('blur', () => {
     pressed = null;
+    backgroundPress = null;
     hideHover();
   });
 
@@ -207,6 +227,7 @@ export function installVertexPicking({ editor, editMode, knifeTool = null, boxSe
   editMode.setSelectionMode = (mode) => {
     const result = previousSetSelectionMode(mode);
     pressed = null;
+    backgroundPress = null;
     if (mode !== 'vertex') hideHover();
     return result;
   };
@@ -214,6 +235,7 @@ export function installVertexPicking({ editor, editMode, knifeTool = null, boxSe
   const previousExit = editMode.exit.bind(editMode);
   editMode.exit = (...args) => {
     pressed = null;
+    backgroundPress = null;
     hideHover();
     return previousExit(...args);
   };
