@@ -62,7 +62,7 @@ export class EditOverlay {
     pointGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pointPositions, 3));
     pointGeometry.setAttribute('color', new THREE.Float32BufferAttribute(pointColors, 3));
     this.points = new THREE.Points(pointGeometry, new THREE.PointsMaterial({
-      size: selectionMode === 'vertex' ? 7 : 5,
+      size: selectionMode === 'vertex' ? 9 : 5,
       sizeAttenuation: false,
       vertexColors: true,
       depthTest: false,
@@ -74,9 +74,6 @@ export class EditOverlay {
     const edgeColors = [];
     this.edgeKeys = [];
     edges.forEach((edge) => {
-      // Three.js stores polygons as triangles. Hide coplanar triangulation edges that
-      // belong to the same logical face group so Edit Mode presents quad/polygon
-      // topology instead of implementation-detail diagonals.
       if (!isLogicalEdge(edge, triangleToFaceGroup)) return;
 
       const a = vertices[edge.a].position;
