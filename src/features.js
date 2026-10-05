@@ -1,3 +1,5 @@
+const featureInstalls = new WeakMap();
+
 async function loadAndInstall(editor, name, loader, installer) {
   try {
     const module = await loader();
@@ -9,7 +11,8 @@ async function loadAndInstall(editor, name, loader, installer) {
   }
 }
 
-export async function installFeatures({ editor, editMode, knifeTool, requestNumber }) {
+async function installFeaturesOnce({ editor, editMode, knifeTool, requestNumber }) {
+  const i18n = await loadAndInstall(editor, 'Localization', () => import('./runtime/i18n.js'), ({ installI18n }) => installI18n({ editor }));
   const resources = await loadAndInstall(editor, 'Resource ownership', () => import('./runtime/resource-ownership.js'), ({ installResourceOwnership }) => installResourceOwnership(editor));
   const transformIntegrity = await loadAndInstall(editor, 'Transform integrity', () => import('./runtime/transform-integrity.js'), ({ installTransformIntegrity }) => installTransformIntegrity(editor));
   const animations = await loadAndInstall(editor, 'Animations', () => import('./runtime/animations.js'), ({ installAnimations }) => installAnimations(editor));
@@ -39,7 +42,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
 
   const materials = await loadAndInstall(editor, 'Materials', () => import('./materials/integration.js'), ({ installMaterialPanel }) => installMaterialPanel({ editor }));
   const projects = await loadAndInstall(editor, 'Projects', () => import('./projects/integration.js'), ({ installProjects }) => installProjects({ editor, editMode, knifeTool }));
-  const settings = await loadAndInstall(editor, 'Settings', () => import('./runtime/settings.js'), ({ installSettings }) => installSettings({ editor, projects }));
+  const settings = await loadAndInstall(editor, 'Settings', () => import('./runtime/settings.js'), ({ installSettings }) => installSettings({ editor, projects, i18n }));
   const gameReady = await loadAndInstall(editor, 'Game Ready', () => import('./game-ready/integration.js'), ({ installGameReady }) => installGameReady({ editor }));
   const gameReadyValidator = await loadAndInstall(editor, 'Game Ready validator v2', () => import('./game-ready/validator-v2.js'), ({ installGameReadyValidatorV2 }) => installGameReadyValidatorV2({ editor, gameReady }));
   const lodPolicy = await loadAndInstall(editor, 'LOD policy', () => import('./game-ready/lod-policy.js'), ({ installLODPolicy }) => installLODPolicy({ editor, gameReady }));
@@ -69,6 +72,7 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
   const hardening = await loadAndInstall(editor, 'Runtime hardening', () => import('./runtime/hardening.js'), ({ installRuntimeHardening }) => installRuntimeHardening({ editor, projects, editMode }));
 
   const installed = {
+    i18n,
     uv, advancedUV, smartIslands, harmonicUnwrap, uvRelax, uvIslandTools,
     materials, projects, settings, gameReady, gameReadyValidator, lodPolicy, optimizerV2, exportProfiles, cleanupAudit,
     paint, procedural, scene, hardening, resources, transformIntegrity, importer, integrity,
@@ -113,5 +117,18 @@ export async function installFeatures({ editor, editMode, knifeTool, requestNumb
   const failed = Object.entries(result).filter(([, value]) => !value).map(([name]) => name);
   if (failed.length) editor.events.onStatus(`Базовый редактор готов · не загрузились: ${failed.join(', ')}`);
   else editor.events.onStatus('Готово · все дополнительные модули подключены');
+  i18n?.translate(document.body);
   return result;
+}
+
+export function installFeatures(args) {
+  const editor = args?.editor;
+  if (!editor) return Promise.reject(new Error('installFeatures requires editor'));
+  if (featureInstalls.has(editor)) return featureInstalls.get(editor);
+  const promise = installFeaturesOnce(args).catch((error) => {
+    featureInstalls.delete(editor);
+    throw error;
+  });
+  featureInstalls.set(editor, promise);
+  return promise;
 }
