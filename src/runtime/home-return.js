@@ -26,24 +26,35 @@ export function installHomeReturn({ home, i18n }) {
     return isEnglish() ? 'Portfolio' : 'Портфолио';
   }
 
+  function setTextIfChanged(element, value) {
+    if (element && element.textContent !== value) element.textContent = value;
+  }
+
+  function setAttributeIfChanged(element, name, value) {
+    if (element && element.getAttribute(name) !== value) element.setAttribute(name, value);
+  }
+
   function updateLabels() {
     const returnButton = home.root.querySelector('[data-home-return]');
     if (returnButton) {
-      returnButton.title = returnLabel();
-      const text = returnButton.querySelector('span');
-      if (text) text.textContent = returnLabel();
+      const label = returnLabel();
+      setAttributeIfChanged(returnButton, 'title', label);
+      setTextIfChanged(returnButton.querySelector('span'), label);
     }
 
     const portfolio = home.root.querySelector('[data-home-portfolio]');
     if (portfolio) {
-      portfolio.title = portfolioLabel();
-      portfolio.setAttribute('aria-label', portfolioLabel());
+      const label = portfolioLabel();
+      setAttributeIfChanged(portfolio, 'title', label);
+      setAttributeIfChanged(portfolio, 'aria-label', label);
     }
   }
 
   function mount() {
     const actions = home.root.querySelector('.home-top-actions');
-    if (!actions) return;
+    if (!actions) return false;
+
+    let changed = false;
 
     if (!actions.querySelector('[data-home-return]')) {
       const button = document.createElement('button');
@@ -53,6 +64,7 @@ export function installHomeReturn({ home, i18n }) {
       button.innerHTML = `<i data-lucide="arrow-left"></i><span>${returnLabel()}</span>`;
       button.addEventListener('click', () => home.hide());
       actions.prepend(button);
+      changed = true;
     }
 
     if (!actions.querySelector('[data-home-portfolio]')) {
@@ -68,13 +80,36 @@ export function installHomeReturn({ home, i18n }) {
         .find((link) => link.href.includes('github.com/Deenfoool/gluestack'));
       if (github) actions.insertBefore(portfolio, github);
       else actions.appendChild(portfolio);
+      changed = true;
     }
 
     updateLabels();
-    refreshIcons();
+
+    // createIcons() mutates DOM. Calling it unconditionally from a MutationObserver
+    // creates a feedback loop: observer -> mount -> refreshIcons -> DOM mutation -> observer.
+    // Only refresh when this function actually inserted fresh icon placeholders.
+    if (changed) refreshIcons();
+    return changed;
   }
 
-  const observer = new MutationObserver(() => queueMicrotask(mount));
+  let scheduled = false;
+  const observer = new MutationObserver((records) => {
+    // Home renderShell() replaces its contents wholesale. We only need to remount
+    // when a newly-added subtree may contain the top action bar. Ignore Lucide's
+    // internal SVG mutations and our own already-mounted controls.
+    const relevant = records.some((record) => [...record.addedNodes].some((node) => {
+      if (node.nodeType !== Node.ELEMENT_NODE) return false;
+      return node.matches?.('.home-top-actions, .home-shell, header, div')
+        && (node.matches?.('.home-top-actions') || node.querySelector?.('.home-top-actions'));
+    }));
+    if (!relevant || scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      mount();
+    });
+  });
+
   observer.observe(home.root, { childList: true, subtree: true });
   window.addEventListener('gluestack:language-changed', updateLabels);
   mount();
