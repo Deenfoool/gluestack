@@ -8,11 +8,16 @@ import {
   triangleNormal,
   triangulateLoop,
 } from './topology.js';
+import { InteractionOverlay, circle, cross, line } from '../runtime/interaction-overlay.js';
 
 const SNAP_EPSILON = 1e-4;
 
 function cloneVertices(vertices) {
   return vertices.map((vertex) => ({ position: vertex.position.clone(), sources: [] }));
+}
+
+function language() {
+  return window.__gluestackI18n?.getLanguage?.() === 'en' ? 'en' : 'ru';
 }
 
 function nearestPointOnEdge(point, a, b) {
@@ -70,18 +75,40 @@ export class KnifeTool {
     this.onStatus = onStatus ?? ((message) => editMode.status(message));
     this.active = false;
     this.start = null;
+    this.hover = null;
+    this.lastPointer = null;
+    this.overlay = new InteractionOverlay();
+    this.hoverFrame = 0;
+    this.pendingPointer = null;
+
+    window.addEventListener('pointermove', (event) => {
+      this.lastPointer = { x: event.clientX, y: event.clientY };
+      if (!this.active) return;
+      this.pendingPointer = event;
+      if (this.hoverFrame) return;
+      this.hoverFrame = requestAnimationFrame(() => {
+        this.hoverFrame = 0;
+        const pending = this.pendingPointer;
+        this.pendingPointer = null;
+        if (pending && this.active) this.updateHover(pending);
+      });
+    }, { capture: true });
   }
 
   begin() {
     if (!this.editMode.active) {
-      this.onStatus('Knife: сначала войдите в Edit Mode');
+      this.onStatus(language() === 'en' ? 'Knife: enter Edit Mode first' : 'Knife: сначала войдите в Edit Mode');
       return false;
     }
     if (this.editMode.selectionMode !== 'face') this.editMode.setSelectionMode('face');
     this.active = true;
     this.start = null;
+    this.hover = null;
     this.editor.transform.detach();
-    this.onStatus('Knife · кликните начало разреза на границе грани · Esc отмена');
+    this.renderOverlay();
+    this.onStatus(language() === 'en'
+      ? 'Knife · choose the first point on a face boundary'
+      : 'Knife · выберите первую точку на границе грани');
     return true;
   }
 
@@ -89,9 +116,87 @@ export class KnifeTool {
     if (!this.active) return false;
     this.active = false;
     this.start = null;
+    this.hover = null;
+    this.pendingPointer = null;
+    if (this.hoverFrame) cancelAnimationFrame(this.hoverFrame);
+    this.hoverFrame = 0;
+    this.overlay.hide();
     this.editMode.updatePivot();
-    if (!silent) this.onStatus('Knife отменён');
+    if (!silent) this.onStatus(language() === 'en' ? 'Knife cancelled' : 'Knife отменён');
     return true;
+  }
+
+  pointerHit(event) {
+    const rect = this.editor.renderer.domElement.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return null;
+    this.editor.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.editor.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    this.editor.raycaster.setFromCamera(this.editor.pointer, this.editor.camera);
+    const hit = this.editor.raycaster.intersectObject(this.editMode.mesh, false)[0];
+    if (!hit) return null;
+    const triangleId = this.editMode.sourceFaceToTriangle[hit.faceIndex];
+    const groupId = triangleId >= 0 ? this.editMode.triangleToFaceGroup[triangleId] : -1;
+    const group = this.editMode.faceGroups[groupId];
+    if (!group) return null;
+    const localPoint = this.editMode.mesh.worldToLocal(hit.point.clone());
+    const snap = this.snapToBoundary(group, localPoint);
+    return snap ? { ...snap, groupId } : null;
+  }
+
+  updateHover(event) {
+    if (!this.active) return;
+    this.hover = this.pointerHit(event);
+    this.renderOverlay();
+  }
+
+  project(localPoint) {
+    const mesh = this.editMode.mesh;
+    if (!mesh) return null;
+    mesh.updateWorldMatrix(true, false);
+    const world = localPoint.clone().applyMatrix4(mesh.matrixWorld);
+    const ndc = world.project(this.editor.camera);
+    const rect = this.editor.renderer.domElement.getBoundingClientRect();
+    return {
+      x: rect.left + (ndc.x + 1) * 0.5 * rect.width,
+      y: rect.top + (1 - ndc.y) * 0.5 * rect.height,
+      visible: ndc.z >= -1.2 && ndc.z <= 1.2,
+    };
+  }
+
+  renderOverlay() {
+    if (!this.active) {
+      this.overlay.hide();
+      return;
+    }
+    const pointer = this.lastPointer ?? (() => {
+      const rect = this.editor.renderer.domElement.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    })();
+    let svg = cross(pointer.x, pointer.y, { radius: 7, color: '#f59b23', opacity: 0.75 });
+
+    if (this.start?.point) {
+      const start = this.project(this.start.point);
+      if (start?.visible) svg += circle(start.x, start.y, { radius: 5, color: '#66c7ff', fill: '#66c7ff', opacity: 0.95 });
+    }
+    if (this.hover?.point) {
+      const hover = this.project(this.hover.point);
+      if (hover?.visible) {
+        const validSecond = !this.start || (this.start.groupId === this.hover.groupId && this.start.edge.key !== this.hover.edge.key);
+        const color = validSecond ? '#f59b23' : '#ef5b5b';
+        svg += circle(hover.x, hover.y, { radius: 5, color, fill: color, opacity: 0.95 });
+        if (this.start?.point) {
+          const start = this.project(this.start.point);
+          if (start?.visible) svg += line(start.x, start.y, hover.x, hover.y, { color, width: 2, opacity: 0.9, dash: validSecond ? '' : '4 4' });
+        }
+      }
+    }
+
+    const en = language() === 'en';
+    const title = this.start ? (en ? 'Knife · End point' : 'Нож · Конечная точка') : (en ? 'Knife · Start point' : 'Нож · Начальная точка');
+    let value = en ? 'Hover a boundary edge' : 'Наведите на граничное ребро';
+    if (this.hover) value = this.start ? (en ? 'Click to cut' : 'Кликните для разреза') : (en ? 'Click to set start' : 'Кликните, чтобы поставить начало');
+    const hint = en ? 'LMB set point · Esc cancel' : 'ЛКМ поставить точку · Esc отменить';
+    this.overlay.show({ x: pointer.x, y: pointer.y, title, value, hint, svg });
   }
 
   handlePointerUp(event) {
@@ -102,50 +207,40 @@ export class KnifeTool {
     this.editor.pointerStart = null;
     if (Math.hypot(dx, dy) > 4) return true;
 
-    const rect = this.editor.renderer.domElement.getBoundingClientRect();
-    this.editor.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    this.editor.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    this.editor.raycaster.setFromCamera(this.editor.pointer, this.editor.camera);
-    const hit = this.editor.raycaster.intersectObject(this.editMode.mesh, false)[0];
-    if (!hit) {
-      this.onStatus('Knife · кликните по редактируемой грани');
-      return true;
-    }
-
-    const triangleId = this.editMode.sourceFaceToTriangle[hit.faceIndex];
-    const groupId = triangleId >= 0 ? this.editMode.triangleToFaceGroup[triangleId] : -1;
-    const group = this.editMode.faceGroups[groupId];
-    if (!group) {
-      this.onStatus('Knife · грань не определена');
-      return true;
-    }
-
-    const localPoint = this.editMode.mesh.worldToLocal(hit.point.clone());
-    const snap = this.snapToBoundary(group, localPoint);
+    const snap = this.pointerHit(event);
+    this.hover = snap;
     if (!snap) {
-      this.onStatus('Knife · не удалось найти граничное ребро');
+      this.renderOverlay();
+      this.onStatus(language() === 'en' ? 'Knife · hover the editable face boundary' : 'Knife · наведите на границу редактируемой грани');
       return true;
     }
 
     if (!this.start) {
-      this.start = { ...snap, groupId };
-      this.onStatus('Knife · начало установлено, кликните конец на другом ребре этой же грани');
+      this.start = snap;
+      this.renderOverlay();
+      this.onStatus(language() === 'en'
+        ? 'Knife · start set, choose another edge on the same face'
+        : 'Knife · начало установлено, выберите другое ребро этой же грани');
       return true;
     }
-    if (this.start.groupId !== groupId) {
-      this.onStatus('Knife · второй клик должен быть на той же логической грани');
+    if (this.start.groupId !== snap.groupId) {
+      this.renderOverlay();
+      this.onStatus(language() === 'en' ? 'Knife · second point must be on the same logical face' : 'Knife · вторая точка должна быть на той же логической грани');
       return true;
     }
     if (this.start.edge.key === snap.edge.key) {
-      this.onStatus('Knife · выберите другое граничное ребро');
+      this.renderOverlay();
+      this.onStatus(language() === 'en' ? 'Knife · choose another boundary edge' : 'Knife · выберите другое граничное ребро');
       return true;
     }
 
-    const success = this.commitSegment(this.start, { ...snap, groupId });
+    const success = this.commitSegment(this.start, snap);
     if (success) {
       this.active = false;
       this.start = null;
-      this.onStatus('Knife · сегмент создан');
+      this.hover = null;
+      this.overlay.hide();
+      this.onStatus(language() === 'en' ? 'Knife · segment created' : 'Knife · сегмент создан');
     }
     return true;
   }
@@ -191,7 +286,7 @@ export class KnifeTool {
       cuts.push({ ...snap, vertexId });
     }
     if (cuts[0].vertexId === cuts[1].vertexId) {
-      this.onStatus('Knife · начало и конец совпадают');
+      this.onStatus(language() === 'en' ? 'Knife · start and end are identical' : 'Knife · начало и конец совпадают');
       return false;
     }
 
@@ -222,7 +317,7 @@ export class KnifeTool {
     const polygonA = walk(first, second);
     const polygonB = walk(second, first);
     if (polygonA.length < 3 || polygonB.length < 3) {
-      this.onStatus('Knife · сегмент не делит грань на две области');
+      this.onStatus(language() === 'en' ? 'Knife · segment does not split the face' : 'Knife · сегмент не делит грань на две области');
       return false;
     }
 
@@ -234,7 +329,9 @@ export class KnifeTool {
       for (const triangleId of topologyEdge?.triangles ?? []) {
         if (groupTriangles.has(triangleId)) continue;
         if (externalSplits.has(triangleId)) {
-          this.onStatus('Knife · соседняя грань слишком сложная для безопасного разреза');
+          this.onStatus(language() === 'en'
+            ? 'Knife · neighboring face is too complex for a safe cut'
+            : 'Knife · соседняя грань слишком сложная для безопасного разреза');
           return false;
         }
         externalSplits.set(triangleId, cut);
