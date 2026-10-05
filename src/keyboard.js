@@ -1,21 +1,53 @@
-import { bevelFace } from './edit/bevel.js';
 import { dissolveSelected } from './edit/dissolve.js';
-import { loopCut } from './edit/cuts.js';
+import { EditModalTools } from './edit/modal-tools.js';
 import { installSelectionTools } from './runtime/selection-tools.js';
 import { installBoxSelect } from './runtime/box-select.js';
 import { installCircleSelect } from './runtime/circle-select.js';
 import { installAdvancedEditSelection } from './runtime/edit-selection-advanced.js';
 
-export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snapButton, openAddMenu, requestNumber }) {
+export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snapButton, openAddMenu }) {
   const selectionTools = installSelectionTools({ editor, editMode });
   const boxSelect = installBoxSelect({ editor, editMode });
   const circleSelect = installCircleSelect({ editor, editMode });
   const advancedSelection = installAdvancedEditSelection({ editMode });
+  const modalTools = new EditModalTools({
+    editor,
+    editMode,
+    knifeTool,
+    transformModal,
+    hud: document.querySelector('#transform-hud'),
+    status: (message) => editor.events.onStatus(message),
+  });
+
+  const actionToModal = {
+    'edit-extrude': 'extrude',
+    'edit-inset': 'inset',
+    'edit-bevel': 'bevel',
+    'edit-loop-cut': 'loopCut',
+  };
+
+  // Intercept modeling buttons before the legacy click handlers in main.js.
+  // This keeps the operation fully interactive and prevents window.prompt().
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest?.('[data-action]');
+    const type = actionToModal[button?.dataset.action];
+    if (!type || !editMode.active) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    document.querySelectorAll('.menu[open]').forEach((menu) => menu.removeAttribute('open'));
+    modalTools.begin(type);
+  }, { capture: true });
+
+  window.__gluestackEditModalTools = modalTools;
 
   window.addEventListener('keydown', (event) => {
     const target = event.target;
     const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable;
     if (typing) return;
+
+    // Active modal tools own input until they are confirmed/cancelled. Their
+    // capture-phase handler processes numbers, Enter and Esc.
+    if (modalTools.active) return;
 
     if (boxSelect?.active) {
       if (event.code === 'Escape') {
@@ -86,33 +118,11 @@ export function bindKeyboard({ editor, editMode, knifeTool, transformModal, snap
       if (event.shiftKey && !commandKey && !event.altKey && event.code === 'KeyM') { event.preventDefault(); advancedSelection.selectByMaterial(); return; }
       if (!commandKey && !event.altKey && event.code === 'KeyB') { event.preventDefault(); boxSelect?.begin(); return; }
       if (!commandKey && !event.altKey && event.code === 'KeyC') { event.preventDefault(); circleSelect?.begin(); return; }
-      if (commandKey && event.code === 'KeyB') {
-        event.preventDefault();
-        const factor = requestNumber('Bevel factor (0..0.5)', 0.12, { min: 0.001, max: 0.499 });
-        if (factor === null) return;
-        const depth = requestNumber('Bevel depth', 0.08);
-        if (depth !== null) bevelFace(editMode, factor, depth);
-        return;
-      }
+      if (commandKey && event.code === 'KeyB') { event.preventDefault(); modalTools.begin('bevel'); return; }
       if (commandKey && event.code === 'KeyX') { event.preventDefault(); dissolveSelected(editMode); return; }
-      if (commandKey && event.code === 'KeyR') {
-        event.preventDefault();
-        const factor = requestNumber('Loop Cut factor (0..1)', 0.5, { min: 0.001, max: 0.999 });
-        if (factor !== null) loopCut(editMode, factor);
-        return;
-      }
-      if (event.code === 'KeyE') {
-        event.preventDefault();
-        const value = requestNumber('Extrude distance', 0.25);
-        if (value !== null) editMode.extrude(value);
-        return;
-      }
-      if (!commandKey && !event.altKey && event.code === 'KeyI') {
-        event.preventDefault();
-        const value = requestNumber('Inset factor (0..1)', 0.2, { min: 0.001, max: 0.999 });
-        if (value !== null) editMode.inset(value);
-        return;
-      }
+      if (commandKey && event.code === 'KeyR') { event.preventDefault(); modalTools.begin('loopCut'); return; }
+      if (event.code === 'KeyE') { event.preventDefault(); modalTools.begin('extrude'); return; }
+      if (!commandKey && !event.altKey && event.code === 'KeyI') { event.preventDefault(); modalTools.begin('inset'); return; }
       if (event.code === 'KeyM') { event.preventDefault(); editMode.mergeSelected(); return; }
       if (event.code === 'KeyF') { event.preventDefault(); editMode.fillSelected(); return; }
       if (event.code === 'KeyK') { event.preventDefault(); knifeTool.begin(); return; }
