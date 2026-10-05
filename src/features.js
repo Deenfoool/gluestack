@@ -94,6 +94,7 @@ async function installFeaturesOnce({ editor, editMode, knifeTool }) {
     editMode,
     knifeTool,
   }));
+  const homeReturn = await loadAndInstall(editor, 'Home navigation', () => import('./runtime/home-return.js'), ({ installHomeReturn }) => installHomeReturn({ home, i18n }));
 
   const gameReady = await loadAndInstall(editor, 'Game Ready', () => import('./game-ready/integration.js'), ({ installGameReady }) => installGameReady({ editor }));
   const gameReadyValidator = await loadAndInstall(editor, 'Game Ready validator v2', () => import('./game-ready/validator-v2.js'), ({ installGameReadyValidatorV2 }) => installGameReadyValidatorV2({ editor, gameReady }));
@@ -126,7 +127,7 @@ async function installFeaturesOnce({ editor, editMode, knifeTool }) {
   const installed = {
     i18n,
     uv, advancedUV, smartIslands, harmonicUnwrap, uvRelax, uvIslandTools,
-    materials, projects, settings, home, gameReady, gameReadyValidator, lodPolicy, optimizerV2, exportProfiles, cleanupAudit,
+    materials, projects, settings, home, homeReturn, gameReady, gameReadyValidator, lodPolicy, optimizerV2, exportProfiles, cleanupAudit,
     paint, procedural, scene, hardening, resources, transformIntegrity, importer, integrity,
     viewportHistory, animations, animationEditor, dopeSheet, modifierStack, metadataPolicy, cleanExport, exportSelected,
   };
