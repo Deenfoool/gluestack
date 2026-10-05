@@ -164,7 +164,7 @@ function writeForm(root, settings) {
   }
 }
 
-function readForm(root, current) {
+function readForm(root) {
   const value = (path) => settingInput(root, path)?.value;
   const checked = (path) => Boolean(settingInput(root, path)?.checked);
   return normalizeSettings({
@@ -195,7 +195,6 @@ function readForm(root, current) {
       rotateSnapDegrees: value('transform.rotateSnapDegrees'),
       scaleSnap: value('transform.scaleSnap'),
     },
-    ...current,
   });
 }
 
@@ -448,7 +447,7 @@ export function installSettings({ editor, projects = null }) {
 
   root.addEventListener('change', (event) => {
     if (!event.target.closest?.('[data-setting]')) return;
-    setState(readForm(root, api.state));
+    setState(readForm(root));
   });
 
   root.addEventListener('click', (event) => {
